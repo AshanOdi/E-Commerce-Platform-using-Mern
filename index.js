@@ -1,6 +1,7 @@
 import express from "express";
 import bodyParser from "body-parser";
 import mongoose from "mongoose";
+import Student from "./models/student.js";
 
 const app = express();
 
@@ -17,23 +18,31 @@ mongoose
     console.log("database connection error");
   });
 
-app.get("/", (req, res) => {
-  console.log(req.body.name);
-});
-
-app.delete("/", (req, res) => {
-  console.log(req.body);
-});
-
 app.post("/", (req, res) => {
-  res.json({
-    message: "this is response of post request",
+  const student = new Student({
+    name: req.body.name,
+    age: req.body.age,
+    stream: req.body.stream,
+    email: req.body.email,
   });
+
+  student
+    .save()
+    .then(() => {
+      res.json({
+        message: "Successfully Added Student",
+      });
+    })
+    .catch(() => {
+      res.json({
+        message: "Failed to Add Student",
+      });
+    });
 });
 
-app.put("/", (req, res) => {
-  res.json({
-    message: "this is response of put request",
+app.get("/", (req, res) => {
+  Student.find().then((data) => {
+    res.json(data);
   });
 });
 
