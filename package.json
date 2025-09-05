@@ -11,7 +11,10 @@
   "author": "Ashan Odithya",
   "license": "ISC",
   "dependencies": {
+    "body": "^5.1.0",
     "express": "^5.1.0",
-    "nodemon": "^3.1.10"
+    "mongoose": "^8.18.0",
+    "nodemon": "^3.1.10",
+    "parser": "^0.1.4"
   }
 }
