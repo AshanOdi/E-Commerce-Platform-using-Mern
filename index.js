@@ -1,7 +1,7 @@
 import express from "express";
 import bodyParser from "body-parser";
 import mongoose from "mongoose";
-import Student from "./models/student.js";
+import studentRouter from "./routers/studentRouter.js";
 
 const app = express();
 
@@ -18,33 +18,7 @@ mongoose
     console.log("database connection error");
   });
 
-app.post("/", (req, res) => {
-  const student = new Student({
-    name: req.body.name,
-    age: req.body.age,
-    stream: req.body.stream,
-    email: req.body.email,
-  });
-
-  student
-    .save()
-    .then(() => {
-      res.json({
-        message: "Successfully Added Student",
-      });
-    })
-    .catch(() => {
-      res.json({
-        message: "Failed to Add Student",
-      });
-    });
-});
-
-app.get("/", (req, res) => {
-  Student.find().then((data) => {
-    res.json(data);
-  });
-});
+app.use("/student", studentRouter);
 
 app.listen(5000, () => {
   console.log("This server is running on Port 5000");
