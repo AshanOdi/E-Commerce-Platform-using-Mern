@@ -2,6 +2,7 @@ import express from "express";
 import bodyParser from "body-parser";
 import mongoose from "mongoose";
 import studentRouter from "./routers/studentRouter.js";
+import userRouter from "./routers/userRoute.js";
 
 const app = express();
 
@@ -19,6 +20,7 @@ mongoose
   });
 
 app.use("/student", studentRouter);
+app.use("/user", userRouter);
 
 app.listen(5000, () => {
   console.log("This server is running on Port 5000");
