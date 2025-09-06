@@ -7,7 +7,21 @@ export function getProduct(req, res) {
 }
 
 export function saveProduct(req, res) {
-  console.log(req.body);
+  //   console.log(req.user);
+  if (req.user == null) {
+    res.status(403).json({
+      message: "Unauthorized",
+    });
+    return;
+  }
+
+  if (req.user.role != "admin") {
+    res.status(403).json({
+      message: "Unauthorized You need to be an admin",
+    });
+    return;
+  }
+  //   console.log(req.body);
 
   const product = new Product({
     name: req.body.name,
