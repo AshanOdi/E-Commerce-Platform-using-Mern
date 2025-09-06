@@ -80,3 +80,20 @@ export function loginUser(req, res) {
     }
   });
 }
+
+export function isAdmin(req) {
+  if (req.user == null) {
+    res.status(403).json({
+      message: "Unauthorized",
+    });
+    return false;
+  }
+
+  if (req.user.role != "admin") {
+    res.status(403).json({
+      message: "Unauthorized You need to be an admin",
+    });
+    return false;
+  }
+  return true;
+}
