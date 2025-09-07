@@ -5,6 +5,7 @@ import studentRouter from "./routers/studentRouter.js";
 import userRouter from "./routers/userRoute.js";
 import productRouter from "./routers/productRoutes.js";
 import jwt from "jsonwebtoken";
+import orderRouter from "./routers/orderRouter.js";
 
 const app = express();
 
@@ -45,6 +46,7 @@ mongoose
 app.use("/student", studentRouter);
 app.use("/user", userRouter);
 app.use("/product", productRouter);
+app.use("/orders", orderRouter);
 
 app.listen(5000, () => {
   console.log("This server is running on Port 5000");
