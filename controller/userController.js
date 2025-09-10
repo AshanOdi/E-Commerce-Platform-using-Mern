@@ -73,7 +73,7 @@ export function loginUser(req, res) {
           token: token,
         });
       } else {
-        res.json({
+        res.status(404).json({
           message: "Invalid Pssword",
         });
       }
