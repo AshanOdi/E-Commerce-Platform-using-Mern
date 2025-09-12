@@ -87,6 +87,10 @@ export async function updateProduct(req, res) {
 
   const productId = req.params.productId;
   const updatingData = req.body;
+
+  console.log(productId);
+  console.log(updatingData);
+
   try {
     await Product.updateOne({ productId: productId }, updatingData);
 
