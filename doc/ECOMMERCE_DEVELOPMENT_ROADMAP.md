@@ -431,6 +431,72 @@ feat(admin): add user management
 
 ---
 
+## Response #11 — Phase 9: Search, Filtering & Pagination
+
+Status: PASS
+
+Completed:
+- `getProduct` rewritten: accepts `search`, `minPrice`, `maxPrice`,
+  `sort` (`price_asc|price_desc|name_asc|name_desc`, default
+  `name_asc`), `page` (default 1), `limit` (default 12, hard cap 50).
+  Response shape changed from a bare array to
+  `{ products: [...], pagination: { page, limit, total, totalPages } }`.
+- Search: case-insensitive PARTIAL match (regex) on `name` + `altNames`,
+  metacharacters escaped (no ReDoS), `typeof === "string"` guarded
+  (Express's default query parser turns `?search[$ne]=x` into an
+  object). `sort` is whitelist-only so an injected object falls back
+  to the default. `page`/`limit` clamped. Customers still never see
+  `isAvailable: false`.
+- Category filtering was NOT built — the Product model has no category
+  field and there is no category data; adding one is a data-modeling
+  change out of scope here.
+- Index: added compound `{ isAvailable: 1, price: 1 }` to the schema —
+  the customer query is exactly
+  `find({isAvailable:true, price:{$gte,$lte}}).sort({price})`, so one
+  index serves the equality filter + range + sort. `explain()`
+  confirmed `IXSCAN` (not `COLLSCAN`). The regex search is
+  deliberately un-indexed (partial-match UX beats a whole-word text
+  index at this catalog size; text index / Atlas Search is the
+  large-catalog answer).
+- Frontend `client/productPage.jsx` rewritten: search box (debounced
+  400ms), min/max price inputs, sort select, Prev/Next pagination with
+  "Page X of Y · N products", loading / empty / error states, and a
+  "Clear filters" button. All filter/sort/page state lives in the URL
+  via `useSearchParams` — the listing is shareable and back-button
+  friendly (same "URL is the source of truth" principle as Phase 1).
+- `admin/productPage.jsx` updated for the new response shape:
+  `?limit=200`, reads `res.data.products`.
+
+Bug found and fixed during testing: the debounced-search effect
+captured a stale `searchParams` snapshot, so ~400ms after "Clear
+filters" its timer rewrote the URL from the pre-clear params (sort +
+minPrice reappeared). Fixed by switching `updateParams` to
+`setSearchParams`'s functional updater (always merges into current
+params) and adding `currentSearch` to the debounce effect's deps so
+its guard uses fresh values.
+
+Verified via curl: response shape; pagination (17 available products,
+page 1 = 12 / page 2 = 5 / page 99 = 0, `limit=999` clamped to 50,
+`page=-3&limit=0` -> 1/12); partial case-insensitive search including
+an altNames hit and a regex-metachar query (200, not 500); price
+range (both bounds, min-only, max-only); every sort direction + an
+injected sort object (falls back, no crash); an unavailable product
+never returned to an anonymous client; a combined
+search+minPrice+sort query. Frontend E2E: initial load, Next/Previous,
+debounced search, sort, price filter, empty state, Clear filters (now
+fully clears), a directly-loaded `?search=oil` URL pre-filling the box,
+and regressions on card->detail navigation and the admin product
+table still loading. Zero console errors. Seed products removed;
+real catalog intact.
+
+Commit:
+
+```text
+feat(product): add search filtering and pagination
+```
+
+---
+
 # RESPONSE/COMMIT PROTOCOL
 
 Every Claude response must use:
@@ -505,40 +571,6 @@ Commit automatically at the end of a successful phase (per the developer's instr
 ---
 
 # PRE-AWS DEVELOPMENT ROADMAP
-
-## Response #11 — Phase 9: Search, Filtering & Pagination
-
-Backend:
-
-- pagination
-- search
-- category filtering if supported
-- price filtering if supported
-- sorting
-
-Frontend:
-
-- search UI
-- filters
-- sorting
-- pagination
-- loading/empty states
-
-Add MongoDB indexes only where justified by actual query patterns.
-
-Learn:
-
-- query parameters
-- MongoDB queries
-- pagination
-- indexes
-- server-side filtering
-
-Commit:
-
-```text
-need a detailed meaningfull describing commit message
-```
 
 ---
 
@@ -1129,13 +1161,14 @@ Completed:
 #08 PASS
 #09 PASS
 #10 PASS
+#11 PASS
 ```
 
 Next:
 
 ```text
-Response #11
-Phase 9 — Search, Filtering & Pagination
+Response #12
+Phase 10 — Reviews & Ratings
 ```
 
 ---
