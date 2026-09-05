@@ -290,6 +290,49 @@ feat(orders): add customer order history
 
 ---
 
+## Response #08 — Phase 6: Authentication UX Completion
+
+Status: PASS
+
+Completed:
+- `AuthContext`/`AuthProvider` (Context+useState, same pattern as
+  CartContext) — decodes the JWT once at startup, exposes `user`,
+  `isAuthenticated`, `isAdmin`, `login()`, `logout()`. Placed INSIDE
+  `BrowserRouter` (unlike `CartProvider`, which wraps it) because it
+  needs `useNavigate()` for logout/expired-session redirects.
+- `utils/jwt.js` — shared `decodeTokenPayload`/`isTokenExpired`,
+  extracted out of `checkoutPage.jsx`'s local copy.
+- `RequireAuth`/`RequireAdmin` route-guard components — replace the
+  copy-pasted per-page "check token in a useEffect" guards in
+  checkoutPage/myOrdersPage/orderDetailPage, and for the first time
+  actually protect `/admin/*` (previously wide open client-side).
+- Global expired-session handling: one `axios` response interceptor in
+  `AuthProvider`, keyed on "did THIS failed request carry an
+  Authorization header" (not "is there a token in storage") so a
+  wrong-password login attempt is never mistaken for a dead session.
+- Logout, auth-aware header (Login vs. "Hi, {name}" + Logout +
+  My Orders), role-based redirect on login (pre-existing, preserved).
+
+Two real bugs found and fixed via testing, not assumed:
+1. `logout()`'s own `navigate("/")` raced against `RequireAuth`'s
+   reactive `<Navigate>` (both triggered by the same `setUser(null)`),
+   producing a wrong final URL and a React "setState during another
+   component's render" warning. Fixed by moving the guards' redirect
+   logic into a `useEffect` (post-commit) instead of returning
+   `<Navigate>` synchronously during render, and removing the
+   redundant explicit navigate from `logout()` entirely.
+2. `login.jsx` silently `console.log`'d failed-login errors with zero
+   user feedback — fixed to `toast.error(...)` while already touching
+   this function for the `AuthContext` integration.
+
+Commit:
+
+```text
+feat(auth): complete authentication and protected routes
+```
+
+---
+
 # RESPONSE/COMMIT PROTOCOL
 
 Every Claude response must use:
@@ -364,34 +407,6 @@ Commit automatically at the end of a successful phase (per the developer's instr
 ---
 
 # PRE-AWS DEVELOPMENT ROADMAP
-
-## Response #08 — Phase 6: Authentication UX Completion
-
-Build:
-
-- logout
-- auth-aware header
-- user display
-- token cleanup
-- expired-token handling
-- protected customer routes
-- protected admin routes
-- role-based redirects
-
-Learn:
-
-- protected routes
-- authentication state
-- token lifecycle
-- client/server authorization
-
-Commit:
-
-```text
-feat(auth): complete authentication and protected routes
-```
-
----
 
 ## Response #09 — Phase 7: Admin Order Management
 
@@ -1072,13 +1087,14 @@ Completed:
 #05 PASS
 #06 PASS
 #07 PASS
+#08 PASS
 ```
 
 Next:
 
 ```text
-Response #08
-Phase 6 — Authentication UX Completion
+Response #09
+Phase 7 — Admin Order Management
 ```
 
 ---
