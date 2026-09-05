@@ -2,6 +2,39 @@ import Order from "../models/order.js";
 import Product from "../models/product.js";
 import { AppError } from "../utils/appError.js";
 
+// Scoped strictly to the logged-in customer's own orders — req.user.id
+// comes from the JWT (see loginUser), not from anything client-supplied.
+export async function getMyOrders(req, res, next) {
+  try {
+    if (!req.user.id) {
+      throw new AppError(401, "Please log in again to view your orders");
+    }
+    const orders = await Order.find({ userId: req.user.id }).sort({ date: -1 });
+    res.json(orders);
+  } catch (err) {
+    next(err);
+  }
+}
+
+export async function getMyOrderById(req, res, next) {
+  try {
+    if (!req.user.id) {
+      throw new AppError(401, "Please log in again to view your orders");
+    }
+    // Matching on BOTH orderId and userId in one query means an order that
+    // exists but belongs to someone else comes back exactly like an order
+    // that doesn't exist at all — no separate "forbidden" response that
+    // would confirm someone else's order ID is real.
+    const order = await Order.findOne({ orderId: req.params.orderId, userId: req.user.id });
+    if (!order) {
+      throw new AppError(404, "Order not found");
+    }
+    res.json(order);
+  } catch (err) {
+    next(err);
+  }
+}
+
 export async function createOrder(req, res, next) {
   // Note: requireAuth middleware already guarantees req.user exists before
   // this runs (see routers/orderRouter.js) — replaces the old manual check.
@@ -14,6 +47,13 @@ export async function createOrder(req, res, next) {
   const decremented = [];
 
   try {
+    // A token issued before userId was added to the JWT payload (Phase 5)
+    // won't have req.user.id — self-resolves once the customer logs in
+    // again (tokens expire within 24h regardless), but give a clear
+    // message now instead of a confusing generic validation error later.
+    if (!req.user.id) {
+      throw new AppError(401, "Please log in again to place an order");
+    }
     if (!Array.isArray(orderInfo.products) || orderInfo.products.length === 0) {
       throw new AppError(400, "products must be a non-empty array");
     }
@@ -99,6 +139,7 @@ export async function createOrder(req, res, next) {
 
     const order = new Order({
       orderId,
+      userId: req.user.id,
       name: orderInfo.name,
       address: orderInfo.address,
       phone: orderInfo.phone,

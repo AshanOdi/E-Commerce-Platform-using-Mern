@@ -6,6 +6,14 @@ const orderSchema = mongoose.Schema({
     required: true,
     unique: true,
   }, //CBC003
+  // Reference, not a snapshot: ownership should always resolve to the
+  // CURRENT user record, unlike productInfo below which deliberately
+  // freezes what was true at purchase time.
+  userId: {
+    type: mongoose.Schema.Types.ObjectId,
+    ref: "users",
+    required: true,
+  },
   email: {
     type: String,
     required: true,

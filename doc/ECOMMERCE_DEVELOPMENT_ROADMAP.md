@@ -253,6 +253,43 @@ fix(inventory): prevent overselling with atomic stock updates
 
 ---
 
+## Response #07 — Phase 5: Customer Order History
+
+Status: PASS
+
+Completed:
+- `Order.userId` (ObjectId ref "users") added — a proper REFERENCE for
+  ownership, alongside the pre-existing `products[].productInfo`
+  SNAPSHOT (what was actually bought, frozen at purchase time). Same
+  document, two different relationship types for two different reasons.
+- JWT payload now carries `id: user._id` (added at login) so order
+  endpoints can scope by ownership without an extra DB lookup per
+  request.
+- Backend: `GET /api/order` (own orders only), `GET /api/order/:orderId`
+  (own order only — a real order belonging to someone else returns the
+  same 404 as a nonexistent one, never 403, so existence isn't leaked).
+- `createOrder` now sets `userId` and gives a clear 401 ("please log in
+  again") if a token predates this change, instead of a confusing
+  generic validation error.
+- Frontend: `/my-orders` (list), `/my-orders/:orderId` (detail), a
+  static "My Orders" header link, and a "View order" link on the
+  checkout success screen straight to the new order.
+
+Verified live: two separate customers — B gets 404 on A's order by ID,
+B's own list shows 0 (not A's orders), A still sees their own order
+and list correctly. Also verified the JWT-migration edge case directly
+(an old-shape token without `id` on both GET and POST /api/order) and
+found/fixed a rough edge where POST fell through to a generic 400
+instead of a clear 401.
+
+Commit:
+
+```text
+feat(orders): add customer order history
+```
+
+---
+
 # RESPONSE/COMMIT PROTOCOL
 
 Every Claude response must use:
@@ -327,38 +364,6 @@ Commit automatically at the end of a successful phase (per the developer's instr
 ---
 
 # PRE-AWS DEVELOPMENT ROADMAP
-
-## Response #07 — Phase 5: Customer Order History
-
-Backend:
-
-- GET /api/order
-- GET /api/order/:orderId
-
-Frontend:
-
-- My Orders
-- Order Details
-- order ID/date/products/quantity/total/status/address
-
-Orders must be scoped to the logged-in customer.
-
-Consider adding a proper `userId` reference to User while preserving product snapshots.
-
-Learn:
-
-- resource ownership
-- authorization
-- MongoDB references
-- snapshot vs reference data
-
-Commit:
-
-```text
-feat(orders): add customer order history
-```
-
----
 
 ## Response #08 — Phase 6: Authentication UX Completion
 
@@ -1066,13 +1071,14 @@ Completed:
 #04 PASS
 #05 PASS
 #06 PASS
+#07 PASS
 ```
 
 Next:
 
 ```text
-Response #07
-Phase 5 — Customer Order History
+Response #08
+Phase 6 — Authentication UX Completion
 ```
 
 ---
