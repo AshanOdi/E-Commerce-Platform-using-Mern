@@ -1,0 +1,1168 @@
+# MERN E-Commerce Platform — Development Roadmap & Learning Log
+
+## Purpose
+
+This is the **Single Source of Truth (SSOT)** for completing the MERN e-commerce application before AWS.
+
+The project is being built with AI assistance, but every phase must remain understandable.
+
+### Rules
+
+1. One response = one logical phase/feature.
+2. Inspect existing code before changing anything.
+3. Explain the design before implementation.
+4. Implement only the current phase.
+5. Run real tests; never claim unrun tests passed.
+6. Explain what was learned.
+7. Give interview questions for important technical phases.
+8. Do NOT create Git commits automatically.
+9. At the end of a successful phase, provide the exact commit message.
+10. Developer manually reviews and commits.
+11. Keep Response Number ↔ Git Commit traceability.
+12. Stop after the assigned phase.
+
+---
+
+# CURRENT STATUS
+
+## Stack
+
+Frontend: React 19, Vite, Tailwind v4, React Router, Axios, Context API, Supabase Storage.
+
+Backend: Node.js, Express 5, Mongoose, MongoDB Atlas, JWT, bcrypt, express-rate-limit.
+
+Current architecture:
+
+```text
+Browser
+  ↓
+React/Vite
+  ↓ REST/Axios
+Express API
+  ↓ JWT/Auth
+MongoDB Atlas
+
+Product images → Supabase Storage
+```
+
+AWS has NOT started.
+
+---
+
+# COMPLETED PHASES
+
+## Response #01 — Phase 0: Security/Foundation
+
+Completed:
+
+- environment-based secrets
+- configurable PORT
+- restrictive CORS
+- JWT authentication and expiry
+- requireAuth / requireAdmin
+- fixed req.User → req.user
+- centralized error handling
+- AppError
+- 404 handling
+- login rate limiting
+- basic validation
+- DB fail-fast behavior
+- image upload validation
+- removed body-parser usage
+
+Important manual action still required:
+
+- Rotate the previously exposed MongoDB Atlas password.
+
+Commit:
+
+```text
+fix(security): harden backend foundation
+```
+
+---
+
+## Response #02 — Phase 0 Final Browser Verification
+
+Completed:
+
+- reproduced and diagnosed localhost vs 127.0.0.1 CORS mismatch
+- verified localhost browser flow
+- verified Phase 0 security behavior
+- no code changes
+
+Commit:
+
+```text
+NO COMMIT — verification only
+```
+
+---
+
+## Response #03 — Phase 1: Product Detail Page
+
+Completed:
+
+- `/product/:productId`
+- ProductDetailPage
+- useParams()
+- backend product fetch
+- loading/error/not-found states
+- image gallery
+- quantity selector
+- clickable ProductCard
+- stopPropagation for Add to Cart
+
+Commit:
+
+```text
+feat(product): add product detail page
+```
+
+---
+
+## Response #04 — Phase 2: Shopping Cart
+
+Status: PASS
+
+Completed:
+
+- CartContext
+- CartProvider
+- useCart()
+- addToCart
+- removeFromCart
+- updateQuantity
+- clearCart
+- derived cartItemCount
+- derived cartTotal
+- localStorage persistence
+- corrupted localStorage recovery
+- `/cart`
+- header cart badge
+- ProductCard Add to Cart
+- ProductDetail Add to Cart
+- duplicate-item merging
+- quantity clamping
+
+Cart item:
+
+```text
+productId
+name
+image
+price
+labelledPrice
+quantity
+stock
+```
+
+Important boundary:
+The frontend cart is only customer intent. Price, stock, availability and final order total must be revalidated by the backend.
+
+Commit:
+
+```text
+feat(cart): implement persistent shopping cart
+```
+
+---
+
+## Response #05 — Phase 3: Checkout
+
+Status: PASS
+
+Completed:
+- `/checkout`
+- delivery form (name/email/phone/address), name+email prefilled from the
+  JWT payload (base64url-decoded client-side, display only — never
+  trusted as auth)
+- login guard (redirects to `/login` if no token)
+- empty-cart guard
+- order summary (display only, from CartContext)
+- submits `{name, address, phone, products:[{productId, Qty}]}` to the
+  existing `POST /api/order` — no price/total ever sent
+- loading / error / success states
+- order confirmation (real orderId + real backend-computed total)
+- clears cart on success
+- CartPage's "Proceed to Checkout" now navigates to `/checkout`
+
+Verified client vs. server authority directly: a forged `curl` request
+with `total: 0.01` / `price: 0.01` was completely ignored — the created
+order stored the real DB price. The backend's existing `createOrder`
+was not modified.
+
+Bug found and fixed during testing: JWT payload decode used plain
+`atob()`, but JWTs are base64**url** (`-`/`_`, no padding) — this
+silently failed on real tokens and blanked the name/email prefill,
+which cascaded into client-side validation blocking submission. Fixed
+by converting base64url → base64 (with padding) before decoding.
+
+Commit:
+
+```text
+feat(checkout): implement customer checkout flow
+```
+
+---
+
+# RESPONSE/COMMIT PROTOCOL
+
+Every Claude response must use:
+
+```text
+RESPONSE NUMBER:
+XX
+
+PHASE:
+Phase X — <name>
+
+STATUS:
+PASS / PASS WITH ISSUES / FAIL
+
+FILES CREATED:
+...
+
+FILES MODIFIED:
+...
+
+FILES NOT MODIFIED:
+...
+
+WHAT WAS IMPLEMENTED:
+...
+
+ARCHITECTURE:
+...
+
+DATA FLOW:
+...
+
+TESTS PERFORMED:
+1.
+2.
+3.
+
+TEST RESULTS:
+...
+
+BUGS FOUND:
+...
+
+BUGS FIXED:
+...
+
+DEFERRED:
+...
+
+WHAT I LEARNED:
+...
+
+INTERVIEW QUESTIONS:
+...
+
+NEXT PHASE:
+Response #XX — <name>
+
+GIT COMMIT:
+<exact commit message>
+```
+
+If incomplete:
+
+```text
+GIT COMMIT:
+NO COMMIT — implementation incomplete.
+```
+
+Never create the Git commit automatically.
+
+---
+
+# PRE-AWS DEVELOPMENT ROADMAP
+
+## Response #06 — Phase 4: Inventory & Atomic Stock
+
+Goal: prevent overselling.
+
+Implement server-side quantity/availability checks and atomic conditional stock decrement.
+
+Expected concurrency behavior:
+
+```text
+Stock = 1
+
+Order A = 1
+Order B = 1
+
+One succeeds
+One fails
+Final stock = 0
+```
+
+Learn:
+
+- race conditions
+- atomic updates
+- MongoDB `$inc`
+- conditional updates
+- consistency
+
+Commit:
+
+```text
+fix(inventory): prevent overselling with atomic stock updates
+```
+
+---
+
+## Response #07 — Phase 5: Customer Order History
+
+Backend:
+
+- GET /api/order
+- GET /api/order/:orderId
+
+Frontend:
+
+- My Orders
+- Order Details
+- order ID/date/products/quantity/total/status/address
+
+Orders must be scoped to the logged-in customer.
+
+Consider adding a proper `userId` reference to User while preserving product snapshots.
+
+Learn:
+
+- resource ownership
+- authorization
+- MongoDB references
+- snapshot vs reference data
+
+Commit:
+
+```text
+feat(orders): add customer order history
+```
+
+---
+
+## Response #08 — Phase 6: Authentication UX Completion
+
+Build:
+
+- logout
+- auth-aware header
+- user display
+- token cleanup
+- expired-token handling
+- protected customer routes
+- protected admin routes
+- role-based redirects
+
+Learn:
+
+- protected routes
+- authentication state
+- token lifecycle
+- client/server authorization
+
+Commit:
+
+```text
+feat(auth): complete authentication and protected routes
+```
+
+---
+
+## Response #09 — Phase 7: Admin Order Management
+
+Build:
+
+- admin order list
+- order details
+- status updates
+- customer/order/date/total/status views
+
+Use sensible status transitions such as:
+
+```text
+pending → confirmed → processing → shipped → delivered
+```
+
+Support cancellation where business rules allow.
+
+Learn:
+
+- admin CRUD
+- RBAC
+- state transitions
+- REST API design
+
+Commit:
+
+```text
+feat(admin): add order management
+```
+
+---
+
+## Response #10 — Phase 8: User Management
+
+Build admin functionality to:
+
+- list users
+- view users
+- block/unblock
+- manage roles where appropriate
+
+Also fix the previously identified admin-creation logic.
+
+Protect against dangerous role changes such as accidentally removing the last admin.
+
+Learn:
+
+- RBAC
+- authorization
+- administrative security
+
+Commit:
+
+```text
+feat(admin): add user management
+```
+
+---
+
+## Response #11 — Phase 9: Search, Filtering & Pagination
+
+Backend:
+
+- pagination
+- search
+- category filtering if supported
+- price filtering if supported
+- sorting
+
+Frontend:
+
+- search UI
+- filters
+- sorting
+- pagination
+- loading/empty states
+
+Add MongoDB indexes only where justified by actual query patterns.
+
+Learn:
+
+- query parameters
+- MongoDB queries
+- pagination
+- indexes
+- server-side filtering
+
+Commit:
+
+```text
+need a detailed meaningfull describing commit message
+```
+
+---
+
+## Response #12 — Phase 10: Reviews & Ratings
+
+Build:
+
+- Review model
+- create review
+- display reviews
+- rating validation
+- one-review-per-user-per-product if appropriate
+- edit/delete own review
+- optional verified-purchase logic
+
+Frontend:
+
+- average rating
+- reviews list
+- review form
+
+Learn:
+
+- relationships
+- compound indexes
+- aggregation
+- authorization
+- verified purchase logic
+
+Commit:
+
+```text
+feat(reviews): add product reviews and ratings
+```
+
+---
+
+## Response #13 — Phase 11: Payment
+
+Choose:
+
+1. a real supported payment gateway, OR
+2. Cash on Delivery.
+
+If online payment is used:
+
+```text
+Checkout
+  ↓
+Create payment session/intent
+  ↓
+Payment provider
+  ↓
+Webhook
+  ↓
+Backend verification
+  ↓
+Order marked paid
+```
+
+Never store raw card details.
+
+Never trust only a frontend payment-success redirect.
+
+Learn:
+
+- payment flow
+- webhooks
+- idempotency
+- payment security
+- server-side verification
+
+Commit for online payment:
+
+```text
+feat(payment): integrate secure payment flow
+```
+
+COD alternative:
+
+```text
+feat(payment): add cash on delivery checkout
+```
+
+---
+
+## Response #14 — Phase 12: Professional Customer Pages
+
+Build real:
+
+- Home
+- About
+- Contact
+
+Home can include:
+
+- hero
+- featured products
+- categories
+- promotions
+- value proposition
+- AI Concierge CTA
+
+Contact can include a proper form and only real/approved business contact information.
+
+Learn:
+
+- responsive UI
+- accessibility
+- semantic HTML
+- component composition
+
+Commit:
+
+```text
+feat(ui): build professional customer pages
+```
+
+---
+
+## Response #15 — Phase 13: Customer Profile
+
+Build:
+
+- profile page
+- update name
+- phone
+- address
+- profile image if required
+- validation
+- protected profile route
+
+Learn:
+
+- PATCH APIs
+- user-owned resources
+- protected forms
+
+Commit:
+
+```text
+feat(profile): add customer profile management
+```
+
+---
+
+## Response #16 — Phase 14: Wishlist & Shopping Enhancements
+
+Build only features that fit the actual business model:
+
+- wishlist
+- remove wishlist item
+- add wishlist item to cart
+- unavailable-product handling
+- optional coupon foundation
+
+Learn:
+
+- user-specific data
+- relationships
+- state synchronization
+
+Commit:
+
+```text
+feat(shop): add wishlist and shopping enhancements
+```
+
+---
+
+## Response #17 — Phase 15: AI Beauty & Style Concierge
+
+This is the main differentiating feature.
+
+Example:
+
+```text
+I need a skincare/costume bundle for a party.
+My budget is Rs. 10,000.
+I want something elegant.
+```
+
+Architecture:
+
+```text
+Customer
+  ↓
+AI Concierge
+  ↓
+POST /api/recommend
+  ↓
+Backend
+  ↓
+Real MongoDB product catalog
+  ↓
+LLM
+  ↓
+Structured product IDs
+  ↓
+Backend validates IDs
+  ↓
+Backend resolves real products
+  ↓
+Frontend recommendations
+  ↓
+Add All to Cart
+```
+
+The LLM must never invent product IDs, names, prices, stock or availability.
+
+Keep the feature as shopping/style recommendation, not medical diagnosis or treatment.
+
+Learn:
+
+- LLM integration
+- prompt engineering
+- structured output
+- hallucination prevention
+- retrieval from application data
+- AI + traditional backend architecture
+
+Commit:
+
+```text
+feat(ai): add beauty and style shopping concierge
+```
+
+---
+
+## Response #18 — Phase 16: Cleanup
+
+Remove after verifying references:
+
+- student model/controller/router
+- `/api/student`
+- Supabase testing page/route
+- profanity placeholder
+- dead dependencies
+- debug logs
+- obsolete sample data
+- other verified development-only artifacts
+
+Do not delete code merely because it looks unused; verify first.
+
+Commit:
+
+```text
+chore(cleanup): remove dead code and development artifacts
+```
+
+---
+
+## Response #19 — Phase 17: Production Hardening
+
+Backend review:
+
+- env vars
+- CORS
+- security headers
+- rate limiting
+- validation
+- error handling
+- status codes
+- DB connection
+- graceful shutdown
+- request limits
+- authorization
+- JWT
+- password handling
+- logging
+- sensitive-data leakage
+
+Frontend review:
+
+- API config
+- loading/error/empty states
+- route handling
+- accessibility
+- responsiveness
+- env vars
+- no secrets
+- no console errors
+
+Learn:
+
+- production hardening
+- threat modeling
+- configuration management
+- observability
+
+Commit:
+
+```text
+chore(prod): harden application for deployment
+```
+
+---
+
+## Response #20 — Phase 18: Automated Testing
+
+Create a reliable test suite.
+
+Backend:
+
+- registration/login
+- authentication/authorization
+- product CRUD
+- order creation
+- inventory concurrency
+- order ownership
+- admin orders
+- user management
+- reviews
+- payment/webhooks
+- AI recommendation validation
+
+Frontend/E2E:
+
+- Register
+- Login
+- Browse
+- Product detail
+- Cart
+- Checkout
+- Order
+- My Orders
+- Logout
+- Admin
+
+Use the project's existing Playwright approach where appropriate.
+
+Learn:
+
+- unit testing
+- integration testing
+- E2E testing
+- regression testing
+
+Commit:
+
+```text
+test: add application test suite
+```
+
+---
+
+## Response #21 — Phase 19: Documentation & Final Pre-AWS Audit
+
+Document:
+
+- README
+- architecture
+- environment variables
+- API
+- local setup
+- tests
+- admin setup
+- deployment prerequisites
+- known limitations
+
+Final audit must confirm:
+
+```text
+Frontend
+  ↓
+Backend
+  ↓
+Database
+  ↓
+Storage
+  ↓
+Auth
+  ↓
+Cart
+  ↓
+Checkout
+  ↓
+Inventory
+  ↓
+Orders
+  ↓
+Payment
+  ↓
+AI
+```
+
+Commit:
+
+```text
+docs: document application and deployment prerequisites
+```
+
+---
+
+# PRE-AWS EXIT CHECKLIST
+
+## Customer
+
+- [ ] Registration
+- [ ] Login
+- [ ] Logout
+- [ ] Forgot password if required
+- [ ] Profile
+- [ ] Product listing
+- [ ] Product detail
+- [ ] Search
+- [ ] Filtering
+- [ ] Pagination
+- [ ] Cart
+- [ ] Checkout
+- [ ] Payment/COD
+- [ ] Order confirmation
+- [ ] My Orders
+- [ ] Reviews
+- [ ] Wishlist if included
+
+## Admin
+
+- [ ] Admin login
+- [ ] Product CRUD
+- [ ] Product image upload
+- [ ] Order management
+- [ ] User management
+- [ ] Inventory management
+- [ ] Server-side authorization
+
+## Backend
+
+- [ ] Authentication
+- [ ] Authorization
+- [ ] Validation
+- [ ] Rate limiting
+- [ ] CORS
+- [ ] Central error handling
+- [ ] Correct status codes
+- [ ] Atomic stock control
+- [ ] Order ownership
+- [ ] Payment verification
+- [ ] Logging
+- [ ] Environment configuration
+
+## Database
+
+- [ ] User schema finalized
+- [ ] Product schema finalized
+- [ ] Order schema finalized
+- [ ] Review schema finalized
+- [ ] Appropriate indexes
+- [ ] User/order relationship finalized
+- [ ] Inventory behavior tested
+
+## AI
+
+- [ ] Recommendation endpoint
+- [ ] Real catalog grounding
+- [ ] Structured output
+- [ ] Product ID validation
+- [ ] No hallucinated products
+- [ ] Cart integration
+- [ ] Safe shopping-only scope
+
+## Quality
+
+- [ ] No placeholders
+- [ ] No profanity
+- [ ] No tutorial code
+- [ ] No scratch routes
+- [ ] No unnecessary debug logs
+- [ ] No secrets in source
+- [ ] Tests passing
+- [ ] Browser E2E passing
+- [ ] README complete
+
+---
+
+# GIT STRATEGY
+
+Use **one logical commit per completed phase**.
+
+Never make giant commits such as:
+
+```text
+final project
+everything
+AWS deployment
+changes
+fix stuff
+```
+
+Instead use the phase-specific commit messages above.
+
+Before every phase:
+
+```bash
+git status
+git log --oneline -5
+```
+
+After implementation:
+
+```bash
+git status
+git diff
+git diff --stat
+```
+
+After manual commit:
+
+```bash
+git log --oneline --decorate -5
+```
+
+If unrelated changes appear, stop and decide whether to revert, defer, or explicitly document them.
+
+---
+
+# RESPONSE ↔ COMMIT MAP
+
+| Response | Phase                     | Commit                                                          |
+| -------- | ------------------------- | --------------------------------------------------------------- |
+| #01      | Security                  | `fix(security): harden backend foundation`                      |
+| #02      | Browser verification      | No commit                                                       |
+| #03      | Product detail            | `feat(product): add product detail page`                        |
+| #04      | Cart                      | `feat(cart): implement persistent shopping cart`                |
+| #05      | Checkout                  | `feat(checkout): implement customer checkout flow`              |
+| #06      | Inventory                 | `fix(inventory): prevent overselling with atomic stock updates` |
+| #07      | Customer orders           | `feat(orders): add customer order history`                      |
+| #08      | Auth                      | `feat(auth): complete authentication and protected routes`      |
+| #09      | Admin orders              | `feat(admin): add order management`                             |
+| #10      | User management           | `feat(admin): add user management`                              |
+| #11      | Search/filter/pagination  | `feat(product): add search filtering and pagination`            |
+| #12      | Reviews                   | `feat(reviews): add product reviews and ratings`                |
+| #13      | Payment                   | `feat(payment): integrate secure payment flow`                  |
+| #14      | Professional pages        | `feat(ui): build professional customer pages`                   |
+| #15      | Profile                   | `feat(profile): add customer profile management`                |
+| #16      | Wishlist                  | `feat(shop): add wishlist and shopping enhancements`            |
+| #17      | AI Concierge              | `feat(ai): add beauty and style shopping concierge`             |
+| #18      | Cleanup                   | `chore(cleanup): remove dead code and development artifacts`    |
+| #19      | Production hardening      | `chore(prod): harden application for deployment`                |
+| #20      | Testing                   | `test: add application test suite`                              |
+| #21      | Documentation/final audit | `docs: document application and deployment prerequisites`       |
+
+---
+
+# HOW CLAUDE SHOULD USE THIS FILE
+
+For every new task:
+
+```text
+Read ECOMMERCE_DEVELOPMENT_ROADMAP.md.
+
+Find the first incomplete phase.
+
+Execute ONLY that phase.
+
+Before coding:
+- inspect the relevant code
+- explain the current architecture
+- explain the planned implementation
+
+After coding:
+- run tests
+- document implementation
+- explain what was learned
+- give interview questions
+- give the exact commit message
+- stop
+
+Do not start the next phase.
+```
+
+The developer should no longer need to paste previous Claude responses into the chat. This file carries the project history, roadmap, scope boundaries and commit mapping.
+
+---
+
+# CURRENT NEXT PHASE
+
+Completed:
+
+```text
+#01 PASS
+#02 PASS
+#03 PASS
+#04 PASS
+#05 PASS
+```
+
+Next:
+
+```text
+Response #06
+Phase 4 — Inventory & Atomic Stock
+```
+
+---
+
+# AWS STAGE — AFTER ALL PRE-AWS PHASES
+
+AWS must remain separate from application completion.
+
+Expected high-level target:
+
+```text
+Internet
+   |
+Route 53
+   |
+CloudFront
+   |
+S3
+   |
+React static frontend
+
+
+Internet
+   |
+Route 53
+   |
+ALB
+   |
+ECS Fargate
+   |
+Express API
+   |
+MongoDB Atlas
+
+Supporting:
+ECR
+Secrets Manager
+IAM
+CloudWatch
+Terraform
+GitHub Actions
+WAF if justified
+```
+
+Possible decisions:
+
+- MongoDB Atlas vs DocumentDB
+- ECS Fargate vs simpler compute
+- Supabase Storage vs S3
+- CloudFront/WAF scope
+- CI/CD architecture
+
+These decisions belong to the AWS stage, not the current MERN completion stage.
+
+When AWS starts, continue the same response/commit system.
+
+Possible AWS responses:
+
+```text
+#22 AWS architecture
+#23 Docker backend
+#24 Frontend production build/container strategy
+#25 ECR
+#26 ECS/Fargate
+#27 ALB
+#28 Route 53
+#29 CloudFront/S3
+#30 Secrets Manager/IAM
+#31 CloudWatch
+#32 Terraform
+#33 GitHub Actions CI/CD
+#34 Production deployment
+#35 Final production verification
+```
+
+The exact AWS plan should be finalized after the pre-AWS exit audit.
+
+---
+
+# FINAL DEVELOPMENT LOOP
+
+```text
+UNDERSTAND
+   ↓
+INSPECT
+   ↓
+PLAN
+   ↓
+IMPLEMENT
+   ↓
+TEST
+   ↓
+DEBUG
+   ↓
+LEARN
+   ↓
+REVIEW
+   ↓
+MANUAL GIT COMMIT
+   ↓
+NEXT RESPONSE
+```
+
+The objective is not simply to finish the project with AI.
+
+The objective is to be able to explain every important engineering decision months later, using the roadmap, Claude responses and Git history.
