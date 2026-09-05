@@ -1,133 +1,106 @@
 import Product from "../models/product.js";
-import { isAdmin } from "./userController.js";
+import { isAdmin } from "../middleware/authMiddleware.js";
+import { AppError } from "../utils/appError.js";
 
-export async function getProduct(req, res) {
-  //   Product.find()
-  //     .then((data) => {
-  //       res.json(data);
-  //     })
-  //     .catch((err) => {
-  //       res.json({
-  //         message: "Failedmm to get Product",
-  //         error: err,
-  //       });
-  //     });
+export async function getProduct(req, res, next) {
   try {
-    if (isAdmin(req)) {
-      const products = await Product.find();
-      res.json(products);
-    } else {
-      const products = await Product.find({ isAvailable: true });
-      res.json(products);
-    }
+    // Soft check, not a hard gate: everyone can list products, admins just
+    // see unavailable ones too. This is why this route has no requireAdmin.
+    const filter = isAdmin(req.user) ? {} : { isAvailable: true };
+    const products = await Product.find(filter);
+    res.json(products);
   } catch (err) {
-    res.json({
-      message: "Failed to get Products",
-      error: err.message,
-    });
+    next(err);
   }
 }
 
-export function saveProduct(req, res) {
-  //   console.log(req.user);
-  //   console.log(req.body);
-
-  if (!isAdmin(req)) {
-    res.status(403).json({
-      message: "You are not authorized to add product",
-    });
-    return;
-  }
-
-  const product = new Product(req.body);
-
-  product
-    .save()
-    .then(() => {
-      res.json({
-        message: "Product addedd successfully",
-      });
-    })
-    .catch(() => {
-      res.json({
-        message: "Product adding fail",
-      });
-    });
-}
-
-export async function deleteProduct(req, res) {
-  if (!isAdmin(req)) {
-    res.status(403).json({
-      message: "You are not authorized to delete products",
-    });
-    return;
-  }
+export async function saveProduct(req, res, next) {
+  // Note: requireAdmin middleware already blocked non-admins before this
+  // controller runs (see routers/productRoutes.js) — no manual check needed here.
   try {
-    await Product.deleteOne({ productId: req.params.productId });
+    const { productId, name, description, labelledPrice, price, stock } = req.body;
 
-    res.json({
-      message: "Product deleted successfully",
-    });
-  } catch (err) {
-    console.log(err);
-    res.status(500).json({
-      message: "Error deleting product",
-      error: err.message,
-    });
-  }
-}
-
-export async function updateProduct(req, res) {
-  if (!isAdmin(req)) {
-    res.status(403).json({
-      message: "You are not authorized to update products",
-    });
-    return;
-  }
-
-  const productId = req.params.productId;
-  const updatingData = req.body;
-
-  console.log(productId);
-  console.log(updatingData);
-
-  try {
-    await Product.updateOne({ productId: productId }, updatingData);
-
-    res.json({
-      message: "Product updated sucessfully",
-    });
-  } catch (err) {
-    res.status(500).json({
-      message: "Internal server error",
-      error: err,
-    });
-  }
-}
-
-export async function getProductById(req, res) {
-  const productId = req.params.productId;
-
-  try {
-    const product = await Product.findOne({ productId: productId });
-
-    if (product == null) {
-      res.status(404).json({
-        message: "Product not found",
-      });
-      return;
+    if (!productId || !name || !description) {
+      throw new AppError(400, "productId, name and description are required");
     }
-    if (product.isAvailable) {
-      res.json(product);
-    } else {
-      if (!isAdmin(req)) {
-        res.status(404).json({
-          message: "Product not found",
-        });
-        return;
-      } else {
-        res.json(product);
-      }
+    if (typeof price !== "number" || price <= 0) {
+      throw new AppError(400, "price must be a positive number");
     }
-  } catch (err) {}
+    if (typeof labelledPrice !== "number" || labelledPrice <= 0) {
+      throw new AppError(400, "labelledPrice must be a positive number");
+    }
+    if (typeof stock !== "number" || stock < 0) {
+      throw new AppError(400, "stock must be a non-negative number");
+    }
+
+    const product = new Product(req.body);
+    await product.save();
+
+    res.status(201).json({ message: "Product added successfully" });
+  } catch (err) {
+    next(err);
+  }
+}
+
+export async function deleteProduct(req, res, next) {
+  try {
+    const result = await Product.deleteOne({ productId: req.params.productId });
+    if (result.deletedCount === 0) {
+      throw new AppError(404, "Product not found");
+    }
+    res.json({ message: "Product deleted successfully" });
+  } catch (err) {
+    next(err);
+  }
+}
+
+export async function updateProduct(req, res, next) {
+  try {
+    const productId = req.params.productId;
+    const updatingData = req.body;
+
+    if (
+      updatingData.price !== undefined &&
+      (typeof updatingData.price !== "number" || updatingData.price <= 0)
+    ) {
+      throw new AppError(400, "price must be a positive number");
+    }
+    if (
+      updatingData.stock !== undefined &&
+      (typeof updatingData.stock !== "number" || updatingData.stock < 0)
+    ) {
+      throw new AppError(400, "stock must be a non-negative number");
+    }
+
+    const result = await Product.updateOne({ productId }, updatingData);
+    if (result.matchedCount === 0) {
+      throw new AppError(404, "Product not found");
+    }
+
+    res.json({ message: "Product updated successfully" });
+  } catch (err) {
+    next(err);
+  }
+}
+
+export async function getProductById(req, res, next) {
+  try {
+    const product = await Product.findOne({ productId: req.params.productId });
+
+    // Resource does not exist -> a normal, expected 404.
+    if (!product) {
+      throw new AppError(404, "Product not found");
+    }
+    // Exists but hidden from non-admins -> same 404, so we don't leak
+    // "this productId exists but you can't see it" to a random visitor.
+    if (!product.isAvailable && !isAdmin(req.user)) {
+      throw new AppError(404, "Product not found");
+    }
+
+    res.json(product);
+  } catch (err) {
+    // Any *unexpected* DB failure lands here too, and now always gets a
+    // response via the central error handler — it can never hang again.
+    next(err);
+  }
 }

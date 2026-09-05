@@ -1,64 +1,54 @@
 import Order from "../models/order.js";
 import Product from "../models/product.js";
+import { AppError } from "../utils/appError.js";
 
-export async function createOrder(req, res) {
-  //get user info
-  //add current users name if not provided
-  //generate order ID
-  //create order object
-
-  //get user info
-  if (req.user == null) {
-    res.status(403).json({
-      message: "please login and try again",
-    });
-    return;
-  }
-  const orderInfo = req.body;
-  if (orderInfo.name == null) {
-    orderInfo.name = req.user.firstName + " " + req.user.lastName;
-  }
-  //CBC00001
-  let orderId = "CBC00001";
-
-  const lastOrder = await Order.find().sort({ date: -1 }).limit(1);
-  if (lastOrder.length > 0) {
-    const lastOrderid = lastOrder[0].orderId; //CBC00551
-    const lastOrderNumberString = lastOrderid.replace("CBC", ""); // 00551
-    const lastOrderNumber = parseInt(lastOrderNumberString); // 551
-    const newOrderNumber = lastOrderNumber + 1; // 552
-    const newOrderNumberString = newOrderNumber.toString().padStart(5, "0"); // 00552
-    //const newOrderNumberString = String(newOrderNumber).padStart(5,"0"); // 00552
-    orderId = "CBC" + newOrderNumberString; // CBC00552
-  }
-
+export async function createOrder(req, res, next) {
+  // Note: requireAuth middleware already guarantees req.user exists before
+  // this runs (see routers/orderRouter.js) — replaces the old manual check.
   try {
+    const orderInfo = req.body;
+
+    if (!Array.isArray(orderInfo.products) || orderInfo.products.length === 0) {
+      throw new AppError(400, "products must be a non-empty array");
+    }
+    if (!orderInfo.address || !orderInfo.phone) {
+      throw new AppError(400, "address and phone are required");
+    }
+
+    if (orderInfo.name == null) {
+      orderInfo.name = req.user.firstName + " " + req.user.lastName;
+    }
+
+    let orderId = "CBC00001";
+    const lastOrder = await Order.find().sort({ date: -1 }).limit(1);
+    if (lastOrder.length > 0) {
+      const lastOrderNumberString = lastOrder[0].orderId.replace("CBC", "");
+      const newOrderNumber = parseInt(lastOrderNumberString) + 1;
+      orderId = "CBC" + newOrderNumber.toString().padStart(5, "0");
+    }
+
     let total = 0;
     let labelledTotal = 0;
     const products = [];
 
     for (let i = 0; i < orderInfo.products.length; i++) {
-      const item = await Product.findOne({
-        productId: orderInfo.products[i].productId,
-      });
-      if (item == null) {
-        res.status(404).json({
-          message:
-            "productwith productId " +
-            orderInfo.products[i].productId +
-            " not found",
-        });
-        return;
+      const { productId, Qty } = orderInfo.products[i];
+
+      if (!productId || typeof Qty !== "number" || Qty <= 0) {
+        throw new AppError(
+          400,
+          `Invalid product entry at index ${i}: productId and a positive Qty are required`
+        );
       }
-      if (item.isAvailable == false) {
-        res.status(404).json({
-          message:
-            "product with productId " +
-            orderInfo.products[i].productId +
-            " is not available right now",
-        });
-        return;
+
+      const item = await Product.findOne({ productId });
+      if (!item) {
+        throw new AppError(404, `Product with productId ${productId} not found`);
       }
+      if (!item.isAvailable) {
+        throw new AppError(400, `Product with productId ${productId} is not available right now`);
+      }
+
       products[i] = {
         productInfo: {
           productId: item.productId,
@@ -69,33 +59,26 @@ export async function createOrder(req, res) {
           labelledPrice: item.labelledPrice,
           price: item.price,
         },
-        quantity: orderInfo.products[i].Qty,
+        quantity: Qty,
       };
-      total += item.price * orderInfo.products[i].Qty;
-      labelledTotal += item.labelledPrice * orderInfo.products[i].Qty;
+      total += item.price * Qty;
+      labelledTotal += item.labelledPrice * Qty;
     }
 
     const order = new Order({
-      orderId: orderId,
+      orderId,
       name: orderInfo.name,
       address: orderInfo.address,
       phone: orderInfo.phone,
       email: req.user.email,
-      total: 0,
-      products: products,
-      labelledTotal: labelledTotal,
-      total: total,
+      total,
+      labelledTotal,
+      products,
     });
 
     const createdOrder = await order.save();
-    res.json({
-      message: "Order created successfully",
-      order: createdOrder,
-    });
+    res.status(201).json({ message: "Order created successfully", order: createdOrder });
   } catch (err) {
-    res.status(500).json({
-      message: "Error creating order",
-      error: err,
-    });
+    next(err);
   }
 }
