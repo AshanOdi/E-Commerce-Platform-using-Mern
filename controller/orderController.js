@@ -5,9 +5,15 @@ import { AppError } from "../utils/appError.js";
 export async function createOrder(req, res, next) {
   // Note: requireAuth middleware already guarantees req.user exists before
   // this runs (see routers/orderRouter.js) — replaces the old manual check.
-  try {
-    const orderInfo = req.body;
+  const orderInfo = req.body;
 
+  // Tracks {productId, Qty} for every item we've successfully, atomically
+  // decremented so far in THIS order attempt — if anything later in this
+  // function fails, we compensate by adding the stock back for each of
+  // these, so a failed order never leaves stock permanently short.
+  const decremented = [];
+
+  try {
     if (!Array.isArray(orderInfo.products) || orderInfo.products.length === 0) {
       throw new AppError(400, "products must be a non-empty array");
     }
@@ -17,14 +23,6 @@ export async function createOrder(req, res, next) {
 
     if (orderInfo.name == null) {
       orderInfo.name = req.user.firstName + " " + req.user.lastName;
-    }
-
-    let orderId = "CBC00001";
-    const lastOrder = await Order.find().sort({ date: -1 }).limit(1);
-    if (lastOrder.length > 0) {
-      const lastOrderNumberString = lastOrder[0].orderId.replace("CBC", "");
-      const newOrderNumber = parseInt(lastOrderNumberString) + 1;
-      orderId = "CBC" + newOrderNumber.toString().padStart(5, "0");
     }
 
     let total = 0;
@@ -41,28 +39,62 @@ export async function createOrder(req, res, next) {
         );
       }
 
-      const item = await Product.findOne({ productId });
-      if (!item) {
-        throw new AppError(404, `Product with productId ${productId} not found`);
+      // Atomic, race-condition-proof stock check-and-decrement: the "is
+      // there enough stock" condition and the "take it" write happen as
+      // ONE database operation. Two concurrent requests for the last unit
+      // can't both read "stock = 1, OK" and both decrement — only one
+      // request's query can still match by the time MongoDB applies it;
+      // the other gets null back, as if the condition was never true.
+      const updated = await Product.findOneAndUpdate(
+        { productId, isAvailable: true, stock: { $gte: Qty } },
+        { $inc: { stock: -Qty } },
+        { new: true }
+      );
+
+      if (!updated) {
+        // The atomic update above already made the real decision (no
+        // stock was taken). This second read is ONLY to build a helpful
+        // error message — it doesn't affect correctness either way.
+        const existing = await Product.findOne({ productId });
+        if (!existing) {
+          throw new AppError(404, `Product with productId ${productId} not found`);
+        }
+        if (!existing.isAvailable) {
+          throw new AppError(400, `Product with productId ${productId} is not available right now`);
+        }
+        throw new AppError(
+          409,
+          `Only ${existing.stock} unit(s) of ${existing.name} left in stock`
+        );
       }
-      if (!item.isAvailable) {
-        throw new AppError(400, `Product with productId ${productId} is not available right now`);
-      }
+
+      decremented.push({ productId, Qty });
 
       products[i] = {
         productInfo: {
-          productId: item.productId,
-          name: item.name,
-          altNames: item.altNames,
-          description: item.description,
-          images: item.images,
-          labelledPrice: item.labelledPrice,
-          price: item.price,
+          productId: updated.productId,
+          name: updated.name,
+          altNames: updated.altNames,
+          description: updated.description,
+          images: updated.images,
+          labelledPrice: updated.labelledPrice,
+          price: updated.price,
         },
         quantity: Qty,
       };
-      total += item.price * Qty;
-      labelledTotal += item.labelledPrice * Qty;
+      total += updated.price * Qty;
+      labelledTotal += updated.labelledPrice * Qty;
+    }
+
+    // Order ID is only allocated once every item's stock is secured — the
+    // loser of a stock race above never reaches this point, so it can't
+    // collide with the winner over the "next" order number.
+    let orderId = "CBC00001";
+    const lastOrder = await Order.find().sort({ date: -1 }).limit(1);
+    if (lastOrder.length > 0) {
+      const lastOrderNumberString = lastOrder[0].orderId.replace("CBC", "");
+      const newOrderNumber = parseInt(lastOrderNumberString) + 1;
+      orderId = "CBC" + newOrderNumber.toString().padStart(5, "0");
     }
 
     const order = new Order({
@@ -79,6 +111,11 @@ export async function createOrder(req, res, next) {
     const createdOrder = await order.save();
     res.status(201).json({ message: "Order created successfully", order: createdOrder });
   } catch (err) {
+    // Compensate: give back every unit this (failed) order attempt took,
+    // so a rejected order never leaves the catalog permanently short.
+    for (const item of decremented) {
+      await Product.updateOne({ productId: item.productId }, { $inc: { stock: item.Qty } });
+    }
     next(err);
   }
 }

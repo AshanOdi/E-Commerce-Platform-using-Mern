@@ -15,9 +15,9 @@ The project is being built with AI assistance, but every phase must remain under
 5. Run real tests; never claim unrun tests passed.
 6. Explain what was learned.
 7. Give interview questions for important technical phases.
-8. Do NOT create Git commits automatically.
-9. At the end of a successful phase, provide the exact commit message.
-10. Developer manually reviews and commits.
+8. Commit at the end of a successful phase, with the exact commit message shown in the response (as of Response #06, done automatically per the developer's instruction — previously manual).
+9. No `Co-Authored-By` / AI-attribution line in commit messages for this project.
+10. Developer still reviews the diff before the next phase begins.
 11. Keep Response Number ↔ Git Commit traceability.
 12. Stop after the assigned phase.
 
@@ -206,6 +206,53 @@ feat(checkout): implement customer checkout flow
 
 ---
 
+## Response #06 — Phase 4: Inventory & Atomic Stock
+
+Status: PASS
+
+Completed:
+- `createOrder` now checks stock via one atomic operation:
+  `Product.findOneAndUpdate({productId, isAvailable:true, stock:{$gte:Qty}}, {$inc:{stock:-Qty}})`
+  — the availability/sufficiency check and the decrement happen as a
+  single indivisible write, closing the check-then-act race window.
+- Multi-item rollback: if any item in an order fails (insufficient
+  stock, not found, unavailable, or the final `Order.save()` itself),
+  every item already decremented in that same order attempt is
+  compensated back (`$inc` positive) before the error is returned.
+- New `409 Conflict` status specifically for "insufficient stock",
+  distinct from `400` (bad input / unavailable) and `404` (not found).
+- Order-ID generation moved to AFTER stock is secured, so the loser of
+  a stock race never reaches order-ID allocation.
+
+Verified live, not just by inspection — fired two truly concurrent
+`POST /api/order` requests at a product with `stock=1`:
+
+```text
+Order A: SUCCESS (201)
+Order B: FAILED (409) — "Only 0 unit(s) ... left in stock"
+Final stock: 0
+```
+
+Also verified: multi-item order where item 2 is insufficient rolls
+item 1's decrement back to its original value; normal single/multi-item
+orders still decrement correctly; 404/400/409 remain distinct; full
+browser cart→checkout→order flow (Phase 3) still passes unchanged.
+
+Found but NOT fixed (separate, pre-existing, out of scope for this
+phase): the order-ID generator itself has its own race — two
+concurrent orders for *different*, both-in-stock products could still
+collide on the "next" order number. Candidate for a future hardening
+pass (e.g. a dedicated atomic counter document) — not an inventory/
+overselling issue, so deliberately deferred.
+
+Commit:
+
+```text
+fix(inventory): prevent overselling with atomic stock updates
+```
+
+---
+
 # RESPONSE/COMMIT PROTOCOL
 
 Every Claude response must use:
@@ -275,46 +322,11 @@ GIT COMMIT:
 NO COMMIT — implementation incomplete.
 ```
 
-Never create the Git commit automatically.
+Commit automatically at the end of a successful phase (per the developer's instruction from Response #06 onward), using this exact message, with no AI co-author line.
 
 ---
 
 # PRE-AWS DEVELOPMENT ROADMAP
-
-## Response #06 — Phase 4: Inventory & Atomic Stock
-
-Goal: prevent overselling.
-
-Implement server-side quantity/availability checks and atomic conditional stock decrement.
-
-Expected concurrency behavior:
-
-```text
-Stock = 1
-
-Order A = 1
-Order B = 1
-
-One succeeds
-One fails
-Final stock = 0
-```
-
-Learn:
-
-- race conditions
-- atomic updates
-- MongoDB `$inc`
-- conditional updates
-- consistency
-
-Commit:
-
-```text
-fix(inventory): prevent overselling with atomic stock updates
-```
-
----
 
 ## Response #07 — Phase 5: Customer Order History
 
@@ -1053,13 +1065,14 @@ Completed:
 #03 PASS
 #04 PASS
 #05 PASS
+#06 PASS
 ```
 
 Next:
 
 ```text
-Response #06
-Phase 4 — Inventory & Atomic Stock
+Response #07
+Phase 5 — Customer Order History
 ```
 
 ---
