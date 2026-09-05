@@ -1101,7 +1101,7 @@ If unrelated changes appear, stop and decide whether to revert, defer, or explic
 | #08      | Auth                      | `feat(auth): complete authentication and protected routes`      |
 | #09      | Admin orders              | `feat(admin): add order management`                             |
 | #10      | User management           | `feat(admin): add user management`                              |
-| #11      | Search/filter/pagination  | `feat(product): add search filtering and pagination`            |
+| #11      | Search/filter/pagination  | `feat(product): add search, filtering, sorting and pagination`  |
 | #12      | Reviews                   | `feat(reviews): add product reviews and ratings`                |
 | #13      | Payment                   | `feat(payment): integrate secure payment flow`                  |
 | #14      | Professional pages        | `feat(ui): build professional customer pages`                   |
