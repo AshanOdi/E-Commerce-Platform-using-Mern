@@ -333,6 +333,51 @@ feat(auth): complete authentication and protected routes
 
 ---
 
+## Response #09 — Phase 7: Admin Order Management
+
+Status: PASS
+
+Completed:
+- Backend, all `requireAdmin`:
+  - `GET /api/order/all` — every order, newest first
+  - `GET /api/order/all/:orderId` — any single order (no userId scoping,
+    unlike the customer endpoint)
+  - `PATCH /api/order/:orderId/status` — status change validated against
+    a state machine:
+    `pending → confirmed|cancelled`, `confirmed → processing|cancelled`,
+    `processing → shipped|cancelled`, `shipped → delivered`,
+    `delivered`/`cancelled` terminal. Any skip / backward / terminal
+    transition → 400.
+  - `/all` routes registered BEFORE `/:orderId` so the literal path
+    isn't captured as a param.
+  - Cancelling an order restocks its items (atomic `$inc`, same pattern
+    as Phase 4's failed-order compensation). "cancelled" is terminal →
+    no double-restock possible.
+- Frontend: `/admin/orders` list (id / customer / date / total / status
+  badge) and `/admin/orders/:orderId` detail with status buttons that
+  show only the valid next transitions (frontend mirrors the state
+  machine for UX; backend still enforces). Replaces the
+  `<h1>ORDER PAGE</h1>` placeholder. Also fixed the `ODERS` → `ORDERS`
+  sidebar typo.
+
+Verified live: full state-machine matrix via curl (invalid value, skip,
+backward-from-terminal, already-X, each valid forward step) + cancel
+restocking exactly the ordered quantity (stock 47 → 42 on a 5-unit
+order → 47 after cancel) + terminal cancelled rejecting further
+changes. Access control confirmed (customer → 403 on every admin
+endpoint), customer's own order endpoints unaffected by the new route
+ordering, and the admin UI E2E (list, detail, status buttons updating
+and re-deriving the next options, non-admin redirected off
+`/admin/orders`). Zero console errors.
+
+Commit:
+
+```text
+feat(admin): add order management
+```
+
+---
+
 # RESPONSE/COMMIT PROTOCOL
 
 Every Claude response must use:
@@ -407,38 +452,6 @@ Commit automatically at the end of a successful phase (per the developer's instr
 ---
 
 # PRE-AWS DEVELOPMENT ROADMAP
-
-## Response #09 — Phase 7: Admin Order Management
-
-Build:
-
-- admin order list
-- order details
-- status updates
-- customer/order/date/total/status views
-
-Use sensible status transitions such as:
-
-```text
-pending → confirmed → processing → shipped → delivered
-```
-
-Support cancellation where business rules allow.
-
-Learn:
-
-- admin CRUD
-- RBAC
-- state transitions
-- REST API design
-
-Commit:
-
-```text
-feat(admin): add order management
-```
-
----
 
 ## Response #10 — Phase 8: User Management
 
@@ -1088,13 +1101,14 @@ Completed:
 #06 PASS
 #07 PASS
 #08 PASS
+#09 PASS
 ```
 
 Next:
 
 ```text
-Response #09
-Phase 7 — Admin Order Management
+Response #10
+Phase 8 — User Management
 ```
 
 ---

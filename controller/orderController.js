@@ -2,6 +2,92 @@ import Order from "../models/order.js";
 import Product from "../models/product.js";
 import { AppError } from "../utils/appError.js";
 
+// Order status state machine. Each key lists the ONLY statuses an order in
+// that state may move to next. delivered/cancelled are terminal.
+const STATUS_TRANSITIONS = {
+  pending: ["confirmed", "cancelled"],
+  confirmed: ["processing", "cancelled"],
+  processing: ["shipped", "cancelled"],
+  shipped: ["delivered"],
+  delivered: [],
+  cancelled: [],
+};
+
+// --- Admin-only (routes are gated by requireAdmin) ---
+
+export async function getAllOrders(req, res, next) {
+  try {
+    const orders = await Order.find().sort({ date: -1 });
+    res.json(orders);
+  } catch (err) {
+    next(err);
+  }
+}
+
+export async function getAnyOrderById(req, res, next) {
+  try {
+    // No userId scoping here (unlike getMyOrderById) — an admin may view
+    // any customer's order. Access is already gated by requireAdmin.
+    const order = await Order.findOne({ orderId: req.params.orderId });
+    if (!order) {
+      throw new AppError(404, "Order not found");
+    }
+    res.json(order);
+  } catch (err) {
+    next(err);
+  }
+}
+
+export async function updateOrderStatus(req, res, next) {
+  try {
+    const { orderId } = req.params;
+    const { status } = req.body;
+
+    const validStatuses = Object.keys(STATUS_TRANSITIONS);
+    if (!status || !validStatuses.includes(status)) {
+      throw new AppError(400, `status must be one of: ${validStatuses.join(", ")}`);
+    }
+
+    const order = await Order.findOne({ orderId });
+    if (!order) {
+      throw new AppError(404, "Order not found");
+    }
+
+    if (order.status === status) {
+      throw new AppError(400, `Order is already "${status}"`);
+    }
+
+    const allowedNext = STATUS_TRANSITIONS[order.status] || [];
+    if (!allowedNext.includes(status)) {
+      throw new AppError(
+        400,
+        `Cannot change an order from "${order.status}" to "${status}"`
+      );
+    }
+
+    // Cancelling returns the reserved stock to the catalog — same atomic
+    // $inc used to compensate a failed order in createOrder. "cancelled"
+    // is terminal, so this can only ever run once per order.
+    if (status === "cancelled") {
+      for (const item of order.products) {
+        await Product.updateOne(
+          { productId: item.productInfo.productId },
+          { $inc: { stock: item.quantity } }
+        );
+      }
+    }
+
+    order.status = status;
+    await order.save();
+
+    res.json({ message: "Order status updated", order });
+  } catch (err) {
+    next(err);
+  }
+}
+
+// --- Customer (routes gated by requireAuth) ---
+
 // Scoped strictly to the logged-in customer's own orders — req.user.id
 // comes from the JWT (see loginUser), not from anything client-supplied.
 export async function getMyOrders(req, res, next) {
