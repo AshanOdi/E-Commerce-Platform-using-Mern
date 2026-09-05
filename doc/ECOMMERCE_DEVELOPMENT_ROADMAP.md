@@ -378,6 +378,59 @@ feat(admin): add order management
 
 ---
 
+## Response #10 — Phase 8: User Management
+
+Status: PASS
+
+Completed:
+- Backend, admin (requireAdmin): `GET /api/user` (all users, password
+  excluded, sorted role then email); `PATCH /api/user/:userId/block`
+  ({isBlocked}); `PATCH /api/user/:userId/role` ({role}).
+- `loginUser` now rejects `isBlocked` users with 403 (checked AFTER the
+  password so a blocked account isn't revealed to someone without the
+  right credentials). `isBlocked` already existed on the schema — it
+  was just never enforced.
+- Admin-creation logic fixed: `createUser` (public `POST /api/user`) no
+  longer reads `role` from the body at all — public registration
+  always creates a customer, full stop. Promotion is admin-only via
+  the new role endpoint; the first admin is seeded in the DB.
+- Administrative safety: an admin cannot block or demote their own
+  account (400), and blocking/demoting an admin is rejected (400) when
+  it would leave zero active admins
+  (`countDocuments({role:"admin", isBlocked:false, _id:{$ne:target}})`
+  === 0). This also backstops the known stale-token window — a
+  just-demoted admin's still-valid token can't use itself to remove
+  the last remaining admin.
+- Frontend: `/admin/users` list (email / name / role badge / status
+  badge / inline Make admin↔Make customer + Block↔Unblock). The
+  admin's own row is marked "(you)" with no action buttons.
+  Backend rejections surface as toasts. Replaced `<h1>USER PAGE</h1>`.
+- Known limitation (unchanged from Phase 0/6, documented not fixed):
+  blocking stops NEW logins; an already-issued token stays valid until
+  it expires (≤24h) — no server-side session revocation.
+
+Verified live via curl with an isolated scenario (real `ashan` admin
+temporarily demoted so the last-admin guard was reachable with test
+admins only, restored after): list access control (admin 200 /
+customer 403 / anon 401, no password field), both self-guards, all
+input-validation branches (bad role value, non-boolean isBlocked,
+missing user 404, malformed id 400), promote/demote round-trip,
+last-admin guard hit via a stale admin token on both role and block
+(400 each), blocked-user login 403 then 200 after unblock, and
+`POST /api/user {role:"admin"}` being silently created as a customer.
+Frontend E2E: users list, own-row locked, promote/demote and
+block/unblock round-trips reflected in the badges, non-admin bounced
+off `/admin/users`. Zero console errors. All test users deleted and
+`ashan` + real accounts restored to their known-good state.
+
+Commit:
+
+```text
+feat(admin): add user management
+```
+
+---
+
 # RESPONSE/COMMIT PROTOCOL
 
 Every Claude response must use:
@@ -452,33 +505,6 @@ Commit automatically at the end of a successful phase (per the developer's instr
 ---
 
 # PRE-AWS DEVELOPMENT ROADMAP
-
-## Response #10 — Phase 8: User Management
-
-Build admin functionality to:
-
-- list users
-- view users
-- block/unblock
-- manage roles where appropriate
-
-Also fix the previously identified admin-creation logic.
-
-Protect against dangerous role changes such as accidentally removing the last admin.
-
-Learn:
-
-- RBAC
-- authorization
-- administrative security
-
-Commit:
-
-```text
-feat(admin): add user management
-```
-
----
 
 ## Response #11 — Phase 9: Search, Filtering & Pagination
 
@@ -1102,13 +1128,14 @@ Completed:
 #07 PASS
 #08 PASS
 #09 PASS
+#10 PASS
 ```
 
 Next:
 
 ```text
-Response #10
-Phase 8 — User Management
+Response #11
+Phase 9 — Search, Filtering & Pagination
 ```
 
 ---
