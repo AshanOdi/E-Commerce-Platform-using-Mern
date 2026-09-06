@@ -6,6 +6,7 @@ import studentRouter from "./routers/studentRouter.js";
 import userRouter from "./routers/userRoute.js";
 import productRouter from "./routers/productRoutes.js";
 import orderRouter from "./routers/orderRouter.js";
+import reviewRouter from "./routers/reviewRouter.js";
 import { authenticateUser } from "./middleware/authMiddleware.js";
 import { errorHandler } from "./middleware/errorHandler.js";
 
@@ -31,6 +32,7 @@ app.use("/api/student", studentRouter);
 app.use("/api/user", userRouter);
 app.use("/api/product", productRouter);
 app.use("/api/order", orderRouter);
+app.use("/api/review", reviewRouter);
 
 // Any request that didn't match a route above -> a clean JSON 404 instead
 // of Express's default HTML error page.

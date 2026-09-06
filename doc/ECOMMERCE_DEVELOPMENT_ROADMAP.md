@@ -497,6 +497,69 @@ feat(product): add search filtering and pagination
 
 ---
 
+## Response #12 — Phase 10: Reviews & Ratings
+
+Status: PASS
+
+Completed:
+- New `models/review.js`: `{ productId (String), userId (ObjectId ref
+  users), userName (snapshot), rating (1-5), comment (<=1000),
+  isVerifiedPurchase, date }`. Two indexes: `{productId, userId}`
+  UNIQUE (one review per user per product, DB-enforced) and
+  `{productId, date:-1}` (product reviews newest-first).
+  Reference vs snapshot again: `userId` is a relationship, `userName`
+  is frozen at review time (byline without a join).
+- New `controller/reviewController.js` + `routers/reviewRouter.js`,
+  mounted at `/api/review`:
+  * `GET /api/review/:productId` — public. Returns
+    `{ reviews (newest first), summary: { average, count,
+    distribution } }`. The summary comes from ONE aggregation
+    (`$match` + `$group` by rating), reduced to avg/count/dist in JS.
+  * `POST /api/review` — requireAuth. `{ productId, rating, comment }`.
+    Validates rating is a whole 1-5 and comment is 1-1000 chars,
+    checks the product exists (404), snapshots `userName` from the
+    JWT, and sets `isVerifiedPurchase` from
+    `Order.exists({ userId, "products.productInfo.productId":
+    productId })`. A duplicate (unique-index E11000) is caught and
+    returned as 409 "You have already reviewed this product".
+  * `PATCH /api/review/:reviewId` — requireAuth, owner only
+    (`findOne({_id, userId})` -> 404 for anyone else's, never 403).
+  * `DELETE /api/review/:reviewId` — requireAuth, owner only.
+- Frontend: new `src/components/productReviews.jsx` (rating summary
+  with a 1-5 distribution, reviews list with Verified Purchase badge,
+  a star-picker + textarea form shown only to a logged-in user who
+  has not reviewed yet, inline edit, delete, and a "log in to review"
+  prompt for anonymous visitors). Wired into `productDetailPage.jsx`
+  as a full-width section below the product (the return was wrapped so
+  the image/detail row and the reviews section stack).
+- Not done (noted): admin review moderation (delete any review) —
+  owner-only this phase; ratings on the product cards / listing —
+  would want a denormalised `averageRating` on Product to avoid N+1,
+  deferred.
+
+Verified via curl (real users disna + akasha, product P001): empty
+summary shape; create + duplicate 409 + second user; aggregation
+(avg 4, count 2, distribution {3:1,5:1}, newest-first order); every
+validation branch (rating 0/6/3.5, empty/1001-char comment, missing
+productId 400, unknown productId 404, unauthenticated 401);
+owner-only edit (200 for owner, 404 for another user, 400 for a
+malformed id) and delete; `isVerifiedPurchase: true` after inserting
+an order containing P001; both indexes present with the unique flag.
+Frontend E2E: anonymous prompt + no form; a logged-in user posts
+(star-picker + comment), sees it listed with Edit/Delete and the form
+gone; edit updates the text; a second user sees the first review
+without Edit/Delete and gets their own form; the summary count
+tracks; delete restores the form. Zero console errors. All test
+reviews removed afterward.
+
+Commit:
+
+```text
+feat(reviews): add product reviews and ratings
+```
+
+---
+
 # RESPONSE/COMMIT PROTOCOL
 
 Every Claude response must use:
@@ -571,40 +634,6 @@ Commit automatically at the end of a successful phase (per the developer's instr
 ---
 
 # PRE-AWS DEVELOPMENT ROADMAP
-
----
-
-## Response #12 — Phase 10: Reviews & Ratings
-
-Build:
-
-- Review model
-- create review
-- display reviews
-- rating validation
-- one-review-per-user-per-product if appropriate
-- edit/delete own review
-- optional verified-purchase logic
-
-Frontend:
-
-- average rating
-- reviews list
-- review form
-
-Learn:
-
-- relationships
-- compound indexes
-- aggregation
-- authorization
-- verified purchase logic
-
-Commit:
-
-```text
-feat(reviews): add product reviews and ratings
-```
 
 ---
 
@@ -1162,13 +1191,14 @@ Completed:
 #09 PASS
 #10 PASS
 #11 PASS
+#12 PASS
 ```
 
 Next:
 
 ```text
-Response #12
-Phase 10 — Reviews & Ratings
+Response #13
+Phase 11 — Payment
 ```
 
 ---
