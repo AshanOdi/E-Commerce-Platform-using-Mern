@@ -7,6 +7,7 @@ import userRouter from "./routers/userRoute.js";
 import productRouter from "./routers/productRoutes.js";
 import orderRouter from "./routers/orderRouter.js";
 import reviewRouter from "./routers/reviewRouter.js";
+import paymentRouter from "./routers/paymentRouter.js";
 import { authenticateUser } from "./middleware/authMiddleware.js";
 import { errorHandler } from "./middleware/errorHandler.js";
 
@@ -21,8 +22,9 @@ const allowedOrigin = process.env.FRONTEND_URL || "http://localhost:5173";
 app.use(cors({ origin: allowedOrigin }));
 
 // Express 5 has built-in JSON body parsing — no need for the separate
-// body-parser package.
-app.use(express.json());
+// body-parser package. The `verify` hook stashes the raw bytes so the
+// payment webhook can HMAC-verify the exact payload the provider signed.
+app.use(express.json({ verify: (req, _res, buf) => { req.rawBody = buf; } }));
 
 // Authentication runs globally: decodes the token if one is present and
 // attaches req.user, but never blocks an anonymous request by itself.
@@ -33,6 +35,7 @@ app.use("/api/user", userRouter);
 app.use("/api/product", productRouter);
 app.use("/api/order", orderRouter);
 app.use("/api/review", reviewRouter);
+app.use("/api/payment", paymentRouter);
 
 // Any request that didn't match a route above -> a clean JSON 404 instead
 // of Express's default HTML error page.

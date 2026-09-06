@@ -30,10 +30,20 @@ const orderSchema = mongoose.Schema({
     type: String,
     required: true,
   },
+  // Fulfilment lifecycle: pending -> confirmed -> processing -> shipped
+  // -> delivered (or cancelled). See Phase 7's state machine.
   status: {
     type: String,
     required: true,
     default: "pending",
+  },
+  // Payment lifecycle, tracked separately from fulfilment. Only ever set
+  // to "paid" by a signature-verified payment webhook — never by the
+  // browser reporting success.
+  paymentStatus: {
+    type: String,
+    enum: ["unpaid", "paid", "failed"],
+    default: "unpaid",
   },
   labelledTotal: {
     type: Number,

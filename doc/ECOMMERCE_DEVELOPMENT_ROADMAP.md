@@ -560,6 +560,101 @@ feat(reviews): add product reviews and ratings
 
 ---
 
+## Response #13 — Phase 11: Payment
+
+Status: PASS
+
+Choice made: **mock gateway** (developer's pick) — the full secure
+architecture of a real integration, with a local "provider" instead
+of Stripe, so it stays runnable with no external accounts. Real seams
+(intent -> hosted pay page -> provider webhook -> verify -> mark paid)
+are all present for a real gateway to slot into later.
+
+Backend:
+- `models/paymentIntent.js` (new): `{ intentId (unique), orderId,
+  userId, amount, currency, status: requires_payment | processing |
+  succeeded | failed, date }`. `amount` is set server-side from the
+  order total. Index on `orderId`.
+- `models/order.js`: added `paymentStatus` (`unpaid | paid | failed`,
+  default `unpaid`) — payment lifecycle tracked separately from the
+  Phase 7 `status` fulfilment lifecycle.
+- `index.js`: `express.json({ verify })` now stashes `req.rawBody` so
+  the webhook can HMAC-verify the exact signed bytes; mounts
+  `/api/payment`.
+- `controller/paymentController.js` + `routers/paymentRouter.js`:
+  * `POST /api/payment/intent { orderId }` (requireAuth) — order
+    must be the caller's and not already paid; creates (or reuses a
+    still-payable) intent; returns `{ intentId, amount, currency }`.
+  * `GET /api/payment/intent/:intentId/status` (requireAuth, owner
+    only) — the pay page polls this.
+  * `POST /api/payment/mock/charge { intentId, outcome }` (requireAuth,
+    owner only) — simulates paying on the provider's page: marks the
+    intent `processing`, builds a `payment.succeeded|failed` event,
+    HMAC-signs it, and delivers it server-to-server to our own
+    `/api/payment/webhook` — a real HTTP round-trip through the real
+    handler.
+  * `POST /api/payment/webhook` (NO auth middleware) — authenticated
+    by signature: recompute HMAC-SHA256 over `req.rawBody` with
+    `MOCKPAY_WEBHOOK_SECRET`, `timingSafeEqual` compare, 401 on
+    mismatch/missing. Idempotent: a repeated event for an intent
+    already in a terminal state is a 200 no-op. On success -> intent
+    `succeeded`, order `paymentStatus: paid` and (if `pending`)
+    `status: confirmed`. On failure -> intent `failed`, order
+    `paymentStatus: failed`, `status: cancelled`, and the reserved
+    stock is returned with the same atomic `$inc` used by a Phase 7
+    admin cancellation.
+- New env var `MOCKPAY_WEBHOOK_SECRET`.
+
+Frontend:
+- `checkoutPage.jsx`: after `POST /api/order` it now creates a
+  payment intent and `navigate("/pay/:intentId")` instead of showing
+  an "Order placed" screen. If intent creation fails it toasts and
+  routes to the order detail. Button label -> "Continue to Payment".
+- `payPage.jsx` (new, route `/pay/:intentId`, RequireAuth): shows the
+  server-computed amount + "no card details collected or stored",
+  a "Pay Now" and a "Simulate a failed payment" button, then polls
+  the intent status once/second to the terminal screen
+  ("Payment successful" with a link to the order / "Payment failed —
+  order cancelled and items returned to stock"). Revisiting a
+  finished intent shows its terminal state, not the buttons.
+- Customer + admin order-detail pages: a payment badge
+  (Paid / Unpaid / Payment failed) next to the fulfilment badge.
+
+Boundary demonstrated: the order is marked paid ONLY by the
+signature-verified webhook, never by the browser. The pay page's
+success screen is cosmetic — the backend already knew.
+
+Verified via curl (with the real webhook secret read from .env):
+- Intent amount === order.total; second `POST /intent` returns the
+  same intent; intent for a missing order -> 404; for an already-paid
+  order -> 400.
+- Webhook with a bad signature -> 401 "Invalid signature"; with no
+  signature -> 401.
+- Happy path: mock charge -> webhook -> intent `succeeded`, order
+  `paid` / `confirmed`.
+- Idempotency: replaying the signed `payment.succeeded` -> 200
+  "already processed", order unchanged; charging an already-succeeded
+  intent -> 409.
+- Failure path: mock charge (failure) -> intent `failed`, order
+  `failed` / `cancelled`, P001 stock 113 -> 116 (restored).
+- Ownership: another user can neither read nor charge someone else's
+  intent (404).
+- Regression: product / review / order / user / admin endpoints all
+  200, expired-JWT -> 401.
+Frontend E2E (real browser): success flow checkout -> /pay ->
+Pay Now -> "Payment successful" -> order detail shows "Paid" +
+"confirmed"; failure flow -> "Simulate a failed payment" ->
+"Payment failed ... returned to stock". Zero console errors. All test
+orders / intents deleted and P001 stock restored to 118 afterward.
+
+Commit:
+
+```text
+feat(payment): integrate secure payment flow
+```
+
+---
+
 # RESPONSE/COMMIT PROTOCOL
 
 Every Claude response must use:
@@ -634,55 +729,6 @@ Commit automatically at the end of a successful phase (per the developer's instr
 ---
 
 # PRE-AWS DEVELOPMENT ROADMAP
-
----
-
-## Response #13 — Phase 11: Payment
-
-Choose:
-
-1. a real supported payment gateway, OR
-2. Cash on Delivery.
-
-If online payment is used:
-
-```text
-Checkout
-  ↓
-Create payment session/intent
-  ↓
-Payment provider
-  ↓
-Webhook
-  ↓
-Backend verification
-  ↓
-Order marked paid
-```
-
-Never store raw card details.
-
-Never trust only a frontend payment-success redirect.
-
-Learn:
-
-- payment flow
-- webhooks
-- idempotency
-- payment security
-- server-side verification
-
-Commit for online payment:
-
-```text
-feat(payment): integrate secure payment flow
-```
-
-COD alternative:
-
-```text
-feat(payment): add cash on delivery checkout
-```
 
 ---
 
@@ -1192,13 +1238,14 @@ Completed:
 #10 PASS
 #11 PASS
 #12 PASS
+#13 PASS
 ```
 
 Next:
 
 ```text
-Response #13
-Phase 11 — Payment
+Response #14
+Phase 12 — Professional Customer Pages
 ```
 
 ---
