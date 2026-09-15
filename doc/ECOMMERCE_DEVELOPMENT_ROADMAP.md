@@ -902,6 +902,96 @@ feat(shop): add wishlist and shopping enhancements
 
 ---
 
+## Response #17 — Phase 15: AI Beauty & Style Concierge
+
+Status: PASS
+
+Provider decision: the roadmap didn't name an LLM provider. Asked —
+developer initially chose Anthropic, then supplied a Google Gemini
+API key instead, so the concierge runs on Gemini (model
+`gemini-3.6-flash`, configurable via `GEMINI_MODEL` in `.env`) via
+direct REST calls, not Anthropic. No SDK dependency was added — Node
+22's built-in `fetch` is enough for one POST per request.
+
+Backend:
+- `utils/geminiClient.js` (new): thin wrapper around
+  `POST https://generativelanguage.googleapis.com/v1beta/models/{model}:generateContent`.
+  Sends a `systemInstruction` that fixes the model's role (a shopping/
+  style concierge), forbids inventing any productId/name/price/stock
+  not in the catalog it's given, forbids medical/dermatological/
+  treatment advice, and tells it to return an empty recommendation
+  with an explanation rather than force an unsuitable one. Forces the
+  reply into `{productIds: string[], message: string}` via Gemini's
+  `responseSchema` structured-output feature (JSON mode) — the model
+  cannot return prose or extra fields, only that shape. One retry
+  with a 1.5s backoff on a 503 ("high demand") — observed live during
+  this phase's own manual testing, so it's a real, not hypothetical,
+  failure mode.
+- `controller/recommendController.js` (new): validates `message`
+  (required, ≤500 chars) and an optional positive `budget`; fetches
+  only `{isAvailable: true, stock: {$gt: 0}}` products (capped at 200)
+  as the catalog handed to the LLM; calls `geminiClient`; then —
+  critical, defense-in-depth step — **never trusts the LLM's
+  productIds directly**. `responseSchema` only constrains shape (an
+  array of strings), not membership, so the returned ids are
+  intersected against the SAME freshly-fetched available-product map
+  before resolving to full docs. Any Gemini/network failure is caught
+  and surfaces as a clean `AppError(502, "...temporarily
+  unavailable...")`, never a raw 500 — this is a nice-to-have feature,
+  not core checkout.
+- `routers/recommendRouter.js` (new): `POST /api/recommend`, public
+  (a guest can use it, same as the cart), rate-limited to 8 requests
+  per 15 minutes per IP (tighter than the login/contact limiters —
+  each call is a real, billed, noticeably-slower LLM request).
+- `index.js`: mounted at `/api/recommend`.
+- `.env`: added `GEMINI_API_KEY` / `GEMINI_MODEL` (gitignored, never
+  committed).
+
+Frontend:
+- `src/pages/client/conciergePage.jsx` (new, route `/concierge`,
+  public — no `RequireAuth`, matching the cart's guest-friendly
+  design): a single request/response form (textarea + optional
+  budget), not a multi-turn chat thread — matches the roadmap's
+  single-exchange example and avoids building conversation-history
+  machinery the phase doesn't ask for. Renders the AI's message plus
+  the REAL resolved `ProductCard`s it returned (the exact same
+  component used everywhere else in the app — heart/wishlist toggle
+  and Add-to-Cart both come for free, no new product-rendering code),
+  with an "Add All to Cart" button that calls the existing
+  `useCart().addToCart()` once per recommended product.
+- `header.jsx`: "AI Concierge" link added to the PUBLIC nav group
+  (next to Contact), not the logged-in-only group — the feature works
+  for guests.
+
+Verified via curl against the real Gemini API (no mocking): a
+realistic elegant/budget request → returned exactly the one genuinely
+matching real product, at its real price, with a real product `_id`,
+never a fabricated one; a budget too small for anything in the
+catalog → `products: []` with an honest explanation, not a forced
+bad match; an adversarial request naming real-world brand products
+that do NOT exist in this store's catalog (Lancôme, Dior) → correctly
+refused, `products: []`, no hallucinated match; **a medical framing
+attempt** ("will this cure my eczema/acne, give me a diagnosis and
+treatment plan") → the model correctly refused to give medical advice
+and stayed in the shopping lane, exactly the guardrail the roadmap
+required; all four input-validation branches (empty/missing message,
+>500 chars, negative budget) → 400; the 8/15-min rate limit was hit
+organically during this same testing and correctly returned 429.
+Frontend E2E (real browser, real Gemini calls, no mocking): the
+public nav link is visible to a logged-out guest; submitting with an
+empty message never enters the loading state; a real request renders
+the AI's reply text and a real recommended product card (not a
+fabricated one); "Add All to Cart" places the real product into the
+actual cart, confirmed on `/cart`. Zero console errors throughout.
+
+Commit:
+
+```text
+feat(ai): add beauty and style shopping concierge
+```
+
+---
+
 # RESPONSE/COMMIT PROTOCOL
 
 Every Claude response must use:
@@ -976,65 +1066,6 @@ Commit automatically at the end of a successful phase (per the developer's instr
 ---
 
 # PRE-AWS DEVELOPMENT ROADMAP
-
----
-
-## Response #17 — Phase 15: AI Beauty & Style Concierge
-
-This is the main differentiating feature.
-
-Example:
-
-```text
-I need a skincare/costume bundle for a party.
-My budget is Rs. 10,000.
-I want something elegant.
-```
-
-Architecture:
-
-```text
-Customer
-  ↓
-AI Concierge
-  ↓
-POST /api/recommend
-  ↓
-Backend
-  ↓
-Real MongoDB product catalog
-  ↓
-LLM
-  ↓
-Structured product IDs
-  ↓
-Backend validates IDs
-  ↓
-Backend resolves real products
-  ↓
-Frontend recommendations
-  ↓
-Add All to Cart
-```
-
-The LLM must never invent product IDs, names, prices, stock or availability.
-
-Keep the feature as shopping/style recommendation, not medical diagnosis or treatment.
-
-Learn:
-
-- LLM integration
-- prompt engineering
-- structured output
-- hallucination prevention
-- retrieval from application data
-- AI + traditional backend architecture
-
-Commit:
-
-```text
-feat(ai): add beauty and style shopping concierge
-```
 
 ---
 
@@ -1405,13 +1436,14 @@ Completed:
 #14 PASS
 #15 PASS
 #16 PASS
+#17 PASS
 ```
 
 Next:
 
 ```text
-Response #17
-Phase 15 — AI Beauty & Style Concierge
+Response #18
+Phase 16 — Cleanup
 ```
 
 ---
