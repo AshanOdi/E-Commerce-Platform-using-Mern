@@ -16,6 +16,24 @@ function publicUser(userDoc) {
   return obj;
 }
 
+// Shared with loginUser and updateMyProfile: firstName/lastName/image live
+// in the token, so any change to them needs a freshly-signed token or the
+// header greeting / checkout prefill etc. show stale data until next login.
+function signToken(user) {
+  return jwt.sign(
+    {
+      id: user._id,
+      email: user.email,
+      firstName: user.firstName,
+      lastName: user.lastName,
+      role: user.role,
+      image: user.image,
+    },
+    process.env.JWT_KEY,
+    { expiresIn: "1d" }
+  );
+}
+
 export async function createUser(req, res, next) {
   try {
     const { email, firstName, lastName, password } = req.body;
@@ -76,22 +94,9 @@ export async function loginUser(req, res, next) {
       throw new AppError(403, "Your account has been blocked. Please contact support.");
     }
 
-    const token = jwt.sign(
-      {
-        id: user._id,
-        email: user.email,
-        firstName: user.firstName,
-        lastName: user.lastName,
-        role: user.role,
-        image: user.image,
-      },
-      process.env.JWT_KEY,
-      { expiresIn: "1d" }
-    );
-
     res.json({
       message: "Login successful",
-      token,
+      token: signToken(user),
       role: user.role,
     });
   } catch (err) {
@@ -185,6 +190,85 @@ export async function setUserRole(req, res, next) {
     await target.save();
 
     res.json({ message: "User role updated", user: publicUser(target) });
+  } catch (err) {
+    next(err);
+  }
+}
+
+// --- Self-service profile (routes gated by requireAuth, always "me") ---
+// No :userId param anywhere here — the target is always req.user.id from
+// the verified JWT, so there is structurally no way to read or edit
+// anyone else's profile through these two routes.
+
+export async function getMyProfile(req, res, next) {
+  try {
+    const user = await User.findById(req.user.id);
+    if (!user) {
+      throw new AppError(404, "User not found");
+    }
+    res.json(publicUser(user));
+  } catch (err) {
+    next(err);
+  }
+}
+
+const PHONE_REGEX = /^[0-9+\-\s()]{7,20}$/;
+const MAX_ADDRESS_LENGTH = 300;
+
+export async function updateMyProfile(req, res, next) {
+  try {
+    const { firstName, lastName, phone, address, image } = req.body;
+    // Deliberately whitelisted: email, password, role and isBlocked can
+    // NEVER be changed through this endpoint, no matter what the request
+    // body contains — those stay admin-only (role/isBlocked, Phase 8) or
+    // need their own dedicated, more careful flow (email/password).
+
+    const user = await User.findById(req.user.id);
+    if (!user) {
+      throw new AppError(404, "User not found");
+    }
+
+    if (firstName !== undefined) {
+      if (typeof firstName !== "string" || firstName.trim() === "") {
+        throw new AppError(400, "firstName cannot be empty");
+      }
+      user.firstName = firstName.trim();
+    }
+    if (lastName !== undefined) {
+      if (typeof lastName !== "string" || lastName.trim() === "") {
+        throw new AppError(400, "lastName cannot be empty");
+      }
+      user.lastName = lastName.trim();
+    }
+    if (phone !== undefined) {
+      if (phone !== "" && !PHONE_REGEX.test(phone)) {
+        throw new AppError(400, "Invalid phone number");
+      }
+      user.phone = phone;
+    }
+    if (address !== undefined) {
+      if (address.length > MAX_ADDRESS_LENGTH) {
+        throw new AppError(400, `address must be ${MAX_ADDRESS_LENGTH} characters or fewer`);
+      }
+      user.address = address;
+    }
+    if (image !== undefined) {
+      if (typeof image !== "string" || image.trim() === "") {
+        throw new AppError(400, "Invalid image");
+      }
+      user.image = image;
+    }
+
+    await user.save();
+
+    // Re-issue the token: firstName/lastName/image are embedded in it, so
+    // without a fresh one the header greeting and checkout prefill would
+    // keep showing the OLD values until the next login.
+    res.json({
+      message: "Profile updated",
+      user: publicUser(user),
+      token: signToken(user),
+    });
   } catch (err) {
     next(err);
   }

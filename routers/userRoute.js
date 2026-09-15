@@ -6,8 +6,10 @@ import {
   getAllUsers,
   setUserBlocked,
   setUserRole,
+  getMyProfile,
+  updateMyProfile,
 } from "../controller/userController.js";
-import { requireAdmin } from "../middleware/authMiddleware.js";
+import { requireAdmin, requireAuth } from "../middleware/authMiddleware.js";
 
 const userRouter = express.Router();
 
@@ -21,6 +23,10 @@ const loginLimiter = rateLimit({
   legacyHeaders: false,
   message: { message: "Too many login attempts. Please try again in 15 minutes." },
 });
+
+// Self-service profile (any logged-in user, always their own record)
+userRouter.get("/me", requireAuth, getMyProfile);
+userRouter.patch("/me", requireAuth, updateMyProfile);
 
 // Admin: user management
 userRouter.get("/", requireAdmin, getAllUsers);

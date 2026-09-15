@@ -726,6 +726,74 @@ feat(ui): build professional customer pages
 
 ---
 
+## Response #15 — Phase 13: Customer Profile
+
+Status: PASS
+
+Backend:
+- `models/user.js`: added `phone` and `address` (both optional strings)
+  — didn't exist before this phase.
+- `controller/userController.js`: extracted a shared `signToken(user)`
+  helper (used by both `loginUser` and the new update, deduplicating
+  the payload shape). New `getMyProfile` / `updateMyProfile`, mounted
+  at `GET/PATCH /api/user/me` (`requireAuth`). Neither route takes a
+  `:userId` param — the target is always `req.user.id` from the
+  verified JWT, so there is structurally no way to read or edit
+  anyone else's profile through them (no ownership check needed
+  because there's nothing to check against). `updateMyProfile`
+  whitelists exactly `{firstName, lastName, phone, address, image}`
+  from the body — `email`, `password`, `role`, `isBlocked` are never
+  read from it, no matter what's sent (verified: a request smuggling
+  `role:"admin"` etc. is silently ignored). On success it **reissues
+  a fresh JWT** — `firstName`/`lastName`/`image` live in the token
+  payload (Phase 5/6), so without a new token the header greeting and
+  checkout's name-prefill would keep showing stale data until the
+  next login.
+- Validation: name fields non-empty if provided; phone matches a
+  loose `[0-9+\-\s()]{7,20}` pattern; address capped at 300 chars;
+  image must be a non-empty string.
+
+Frontend:
+- `src/pages/client/profilePage.jsx` (new, route `/profile`,
+  `RequireAuth`): fetches `GET /api/user/me` on mount, editable
+  first/last name, phone, address, and a profile-photo file input
+  that reuses the EXISTING `mediaUpload.jsx` Supabase helper (the
+  same one admin product images already use — no new upload code).
+  Email and role are shown read-only. On save, `PATCH /api/user/me`
+  then `useAuth().login(newToken)` to refresh `AuthContext`
+  immediately — no re-login required to see the new name/photo
+  anywhere in the app.
+- `header.jsx`: the "Hi, {name}" greeting is now a `<Link to="/profile">`
+  — the only way to reach the page, so this was a necessary touch,
+  not incidental redesign.
+
+Verified via curl: `GET/PATCH /me` round-trip; every validation
+branch (empty name, bad phone, over-length address) → 400; **the
+privilege-escalation attempt** — `PATCH /me` with
+`{role:"admin", isBlocked:true, email:"hacked@..."}` — confirmed
+completely ignored (response still shows the real role/isBlocked/
+email); both routes 401 when unauthenticated. Frontend E2E (real
+browser, label-based selectors after an early test-script indexing
+mistake was caught and corrected): prefill correct for every field;
+client-side empty-name validation blocks submission; a real update
+(name/phone/address/photo, the photo via a real Supabase upload)
+saves and the header updates to the new name **live, with no
+re-login**; a page reload re-fetches from the server and confirms
+every field persisted; and — the key cross-cutting proof — revisiting
+Checkout afterward shows the **new** name in its prefill, confirming
+the token refresh propagates everywhere the JWT is decoded, not just
+the header. Zero new console errors. Test user and its profile-photo
+upload cleaned up (the tiny test image in Supabase Storage could not
+be deleted via the anon key — noted, low-impact, one leftover file).
+
+Commit:
+
+```text
+feat(profile): add customer profile management
+```
+
+---
+
 # RESPONSE/COMMIT PROTOCOL
 
 Every Claude response must use:
@@ -800,32 +868,6 @@ Commit automatically at the end of a successful phase (per the developer's instr
 ---
 
 # PRE-AWS DEVELOPMENT ROADMAP
-
----
-
-## Response #15 — Phase 13: Customer Profile
-
-Build:
-
-- profile page
-- update name
-- phone
-- address
-- profile image if required
-- validation
-- protected profile route
-
-Learn:
-
-- PATCH APIs
-- user-owned resources
-- protected forms
-
-Commit:
-
-```text
-feat(profile): add customer profile management
-```
 
 ---
 
@@ -1277,13 +1319,14 @@ Completed:
 #12 PASS
 #13 PASS
 #14 PASS
+#15 PASS
 ```
 
 Next:
 
 ```text
-Response #15
-Phase 13 — Customer Profile
+Response #16
+Phase 14 — Wishlist & Shopping Enhancements
 ```
 
 ---

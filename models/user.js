@@ -28,6 +28,14 @@ const userSchema = mongoose.Schema({
     default: false,
     required: true,
   },
+  phone: {
+    type: String,
+    required: false,
+  },
+  address: {
+    type: String,
+    required: false,
+  },
   image: {
     type: String,
     required: false,
