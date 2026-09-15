@@ -8,6 +8,9 @@ import {
   setUserRole,
   getMyProfile,
   updateMyProfile,
+  getMyWishlist,
+  addToWishlist,
+  removeFromWishlist,
 } from "../controller/userController.js";
 import { requireAdmin, requireAuth } from "../middleware/authMiddleware.js";
 
@@ -27,6 +30,11 @@ const loginLimiter = rateLimit({
 // Self-service profile (any logged-in user, always their own record)
 userRouter.get("/me", requireAuth, getMyProfile);
 userRouter.patch("/me", requireAuth, updateMyProfile);
+
+// Self-service wishlist (any logged-in user, always their own list)
+userRouter.get("/wishlist", requireAuth, getMyWishlist);
+userRouter.post("/wishlist/:productId", requireAuth, addToWishlist);
+userRouter.delete("/wishlist/:productId", requireAuth, removeFromWishlist);
 
 // Admin: user management
 userRouter.get("/", requireAdmin, getAllUsers);

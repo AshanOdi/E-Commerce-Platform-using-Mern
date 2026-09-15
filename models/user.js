@@ -41,6 +41,14 @@ const userSchema = mongoose.Schema({
     required: false,
     default: "https://avatar.iran.liara.run/public/boy?username=Ash",
   },
+  // Just productId strings, not refs to full product docs — resolved against
+  // the Product collection on read (getMyWishlist), the same way order line
+  // items and cart items already identify products by productId elsewhere
+  // in this app rather than by Mongo _id.
+  wishlist: {
+    type: [{ type: String }],
+    default: [],
+  },
 });
 
 const User = mongoose.model("users", userSchema);

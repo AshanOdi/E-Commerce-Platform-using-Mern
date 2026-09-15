@@ -794,6 +794,114 @@ feat(profile): add customer profile management
 
 ---
 
+## Response #16 — Phase 14: Wishlist & Shopping Enhancements
+
+Status: PASS
+
+Scope decision: the roadmap listed an "optional coupon foundation"
+for this phase. Deferred it entirely — no Coupon model, no
+`/api/coupon` route exists anywhere yet — to keep the phase focused
+on its two non-optional items (wishlist, unavailable-product
+handling), per the developer's explicit choice when asked.
+
+Backend:
+- `models/user.js`: added `wishlist` (array of `productId` strings,
+  default `[]`) — plain strings, not refs to Product `_id`, matching
+  how order line items and the cart already identify products by
+  `productId` elsewhere in this app.
+- `controller/userController.js`: three new self-scoped functions,
+  same pattern as Phase 13's `/me` routes — no `:userId` param
+  anywhere, the wishlist acted on is always `req.user.id`'s own.
+  `getMyWishlist` resolves the stored productId strings against the
+  live `Product` collection and returns full docs (a deleted
+  product's id just silently disappears from the result — no error,
+  no broken placeholder). `addToWishlist` (`$addToSet`, 404s if the
+  productId doesn't exist) and `removeFromWishlist` (`$pull`, always
+  succeeds — removing something not on the list is harmless) are
+  both fully idempotent.
+- `routers/userRoute.js`: `GET /api/user/wishlist`,
+  `POST/DELETE /api/user/wishlist/:productId` (all `requireAuth`).
+
+Frontend — Wishlist:
+- `src/context/WishlistContext.jsx` (new): server-backed, unlike
+  `CartContext` — nothing is persisted to `localStorage`, since a
+  guest has nothing to keep (the heart toggle just asks them to log
+  in). Re-syncs whenever `isAuthenticated` changes, so logging out
+  clears it and logging in as a different user fetches THAT user's
+  wishlist, never a stale previous one. `toggleWishlist` updates
+  optimistically (the heart flips instantly) and reverts if the
+  request fails.
+- `src/pages/client/wishlistPage.jsx` (new, route `/wishlist`,
+  `RequireAuth`): lists full product docs with Add-to-Cart and
+  Remove; an item whose product has since become unavailable is shown
+  greyed-out with "No longer available" and a disabled Add-to-Cart
+  button, rather than just vanishing or crashing.
+- Heart toggle (`react-icons` `FaHeart`/`FaRegHeart`) added to both
+  `productCard.jsx` and `productDetailPage.jsx`; clicking it while
+  logged out shows a toast asking the customer to log in, with no
+  navigation forced.
+- `header.jsx`: new "Wishlist (n)" link next to "My Orders".
+
+Frontend — unavailable-product handling (cart):
+- `CartContext.jsx`: cart items are a `localStorage` snapshot taken
+  at add-to-cart time, so price/stock/availability can silently drift
+  after that — a new async `refreshCart()` re-fetches every line
+  item's live product data and reconciles it. Two DISTINCT real-world
+  cases, verified separately because they behave differently:
+  - **Sellout** (`isAvailable: true`, `stock: 0`) — this is the
+    common case in practice, because `createOrder`'s atomic
+    `findOneAndUpdate` decrements stock on purchase but never flips
+    `isAvailable`. The product still fetches fine (200), so the item
+    stays visible in the cart, greyed out, flagged "No longer
+    available," excluded from `cartTotal`/`cartItemCount`, with
+    quantity controls removed and only a Remove button left.
+  - **Delisting** (`isAvailable: false`) — `GET /api/product/:id`
+    already 404s an unavailable product for non-admins (an existing
+    Phase 9 convention, so an unavailable listing can't be probed/
+    linked). From the cart's perspective this is indistinguishable
+    from the product having been deleted outright, so it's handled
+    the same way: silently dropped from the cart with a toast
+    ("no longer sold"), not shown as a broken row.
+  - **Partial stock loss** (stock reduced but still > 0): quantity is
+    clamped down to the new stock level and a toast explains why.
+- `cartPage.jsx`: calls `refreshCart()` on mount ("Checking
+  availability…" shown while in flight); "Proceed to Checkout" is
+  disabled with an inline hint whenever any unavailable item remains.
+- `checkoutPage.jsx`: calls `refreshCart()` on mount too, as a safety
+  net for a customer who reaches `/checkout` directly (back button,
+  bookmark) with a cart that went stale since it was last opened in
+  `/cart` — submitting with an unavailable item still present is
+  blocked client-side and redirects back to `/cart` with a toast,
+  rather than relying solely on the server's own order-creation
+  validation to catch it after the fact.
+
+Verified via curl: `GET/POST/DELETE /api/user/wishlist(/:productId)`
+— empty wishlist, add, idempotent re-add, adding a nonexistent
+productId → 404, full resolved doc returned by GET, remove, empty
+again, both routes 401 with no token. Frontend E2E (real browser,
+throwaway customer + a throwaway admin-created test product, both
+cleaned up afterward): heart toggle updates the header's
+"Wishlist (n)" count and the wishlist page; Add-to-Cart from the
+wishlist page lands the item in the real cart; removing from the
+wishlist returns it to the empty state. Unavailable handling tested
+as three separate, deliberately distinguished scenarios: (1) stock
+driven to 0 with `isAvailable` left `true` → item flagged in-place,
+excluded from the subtotal, checkout button disabled, checkout page
+itself also blocks and redirects back to `/cart`; (2) `isAvailable`
+set to `false` → item silently dropped, cart correctly shows its
+empty state rather than a broken row; (3) stock reduced from 3 to 1
+(not to zero) → quantity auto-clamped to 1 on reload. All ten
+assertions passed on a clean run. No new console errors during any
+normal (fully-available) flow.
+
+Commit:
+
+```text
+feat(shop): add wishlist and shopping enhancements
+```
+
+---
+
 # RESPONSE/COMMIT PROTOCOL
 
 Every Claude response must use:
@@ -868,30 +976,6 @@ Commit automatically at the end of a successful phase (per the developer's instr
 ---
 
 # PRE-AWS DEVELOPMENT ROADMAP
-
----
-
-## Response #16 — Phase 14: Wishlist & Shopping Enhancements
-
-Build only features that fit the actual business model:
-
-- wishlist
-- remove wishlist item
-- add wishlist item to cart
-- unavailable-product handling
-- optional coupon foundation
-
-Learn:
-
-- user-specific data
-- relationships
-- state synchronization
-
-Commit:
-
-```text
-feat(shop): add wishlist and shopping enhancements
-```
 
 ---
 
@@ -1320,13 +1404,14 @@ Completed:
 #13 PASS
 #14 PASS
 #15 PASS
+#16 PASS
 ```
 
 Next:
 
 ```text
-Response #16
-Phase 14 — Wishlist & Shopping Enhancements
+Response #17
+Phase 15 — AI Beauty & Style Concierge
 ```
 
 ---

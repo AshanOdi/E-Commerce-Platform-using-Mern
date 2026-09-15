@@ -1,4 +1,5 @@
 import User from "../models/user.js";
+import Product from "../models/product.js";
 import bcrypt from "bcrypt";
 import jwt from "jsonwebtoken";
 import dotenv from "dotenv";
@@ -269,6 +270,64 @@ export async function updateMyProfile(req, res, next) {
       user: publicUser(user),
       token: signToken(user),
     });
+  } catch (err) {
+    next(err);
+  }
+}
+
+// --- Wishlist (routes gated by requireAuth, always "me") ---
+// Same shape as the profile routes above: no :userId param, the wishlist
+// acted on is always req.user.id's own, so there is nothing to authorize
+// beyond "is this a logged-in user".
+
+export async function getMyWishlist(req, res, next) {
+  try {
+    const user = await User.findById(req.user.id);
+    if (!user) {
+      throw new AppError(404, "User not found");
+    }
+
+    // Resolve stored productId strings against the live catalog. A product
+    // that was deleted since being wishlisted just quietly disappears from
+    // the result — no error, no leftover placeholder — rather than the
+    // caller ever seeing a broken entry.
+    const products = await Product.find({ productId: { $in: user.wishlist } });
+
+    res.json(products);
+  } catch (err) {
+    next(err);
+  }
+}
+
+export async function addToWishlist(req, res, next) {
+  try {
+    const { productId } = req.params;
+
+    const product = await Product.findOne({ productId });
+    if (!product) {
+      throw new AppError(404, "Product not found");
+    }
+
+    // $addToSet: adding a productId already on the list is a no-op, not an
+    // error — the client doesn't need to know or care whether this was
+    // already wishlisted before calling this.
+    await User.updateOne({ _id: req.user.id }, { $addToSet: { wishlist: productId } });
+
+    res.json({ message: "Added to wishlist" });
+  } catch (err) {
+    next(err);
+  }
+}
+
+export async function removeFromWishlist(req, res, next) {
+  try {
+    const { productId } = req.params;
+
+    // No existence check needed: removing something not on the list (or
+    // not a real product at all) is harmless and idempotent either way.
+    await User.updateOne({ _id: req.user.id }, { $pull: { wishlist: productId } });
+
+    res.json({ message: "Removed from wishlist" });
   } catch (err) {
     next(err);
   }
