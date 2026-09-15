@@ -655,6 +655,77 @@ feat(payment): integrate secure payment flow
 
 ---
 
+## Response #14 — Phase 12: Professional Customer Pages
+
+Status: PASS
+
+Built real Home / About / Contact pages, replacing the `<h1>` stub
+routes in `home.jsx`.
+
+Deliberate scope decisions:
+- **Contact intentionally lists no phone/address/email.** The
+  roadmap's own instruction was "only real/approved business contact
+  information" — none was supplied, so rather than inventing a
+  plausible-looking fake one, Contact is a genuinely **working form**
+  backed by a real endpoint that stores submissions. No fabricated
+  facts anywhere on the page.
+- **Home skips "categories"** — no `category` field/data on `Product`
+  (same call made in Phase 9's search work).
+- **"On Sale" is derived, not fabricated** — filtered client-side from
+  the same featured-products fetch (`labelledPrice > price`), no new
+  backend query.
+- **AI Concierge teaser is explicitly labelled "Coming soon"** and
+  links nowhere — Phase 15 doesn't exist yet, so nothing overpromises
+  a feature that isn't live.
+- **About's copy is generic brand-values language** — no invented
+  founding dates, names, or claims.
+
+Backend (new, minimal — only what Contact needed):
+- `models/contactMessage.js`: `{ name, email, subject, message, date
+  }`.
+- `controller/contactController.js` + `routers/contactRouter.js`,
+  mounted at `POST /api/contact` (public): validates all fields
+  present, email format, message ≤2000 chars; rate-limited to 5 per
+  15 min per IP (same `express-rate-limit` pattern as Phase 0's login
+  limiter — a public unauthenticated form is a spam target).
+
+Frontend (`src/pages/client/`):
+- `landingPage.jsx` (`/`): hero + "Shop Now" CTA, Featured Products
+  (live `GET /api/product?limit=8&sort=name_asc`, reuses
+  `ProductCard`), On Sale (derived subset), a 3-point value-prop strip
+  (semantic `<section>`/`sr-only` heading), AI Concierge teaser.
+- `aboutPage.jsx` (`/about`): three `<section>`s (mission, how
+  products are chosen, review-trust policy) each with a proper
+  `id`-linked `<h2>`.
+- `contactPage.jsx` (`/contact`): a real form (name/email/subject/
+  message) with associated `<label>`s, client-side required-field
+  validation, POSTs to `/api/contact`, loading/success/error states.
+- Accessibility/semantic-HTML pass on all three: one `<h1>` per page,
+  `<main>`/`<section>` landmarks, `aria-labelledby` tying headings to
+  their sections, labels properly associated with inputs.
+
+Verified: backend contact validation (missing fields → 400, bad email
+→ 400) and the rate limiter (6th rapid submission → 429, 5 allowed).
+Frontend E2E (real browser): hero/CTA/featured-products/value-props/
+AI-teaser all present and correct; "Shop Now" → `/product`; About
+renders its 3 sections; Contact's empty-submit shows inline
+validation, a real submission reaches the backend and shows "Message
+sent", and the page was explicitly checked to contain **no**
+fabricated phone/address text. Confirmed via direct DOM measurement
+that an apparently-truncated "On Sale" card in one screenshot was a
+`fullPage` screenshot-timing artifact, not a real rendering bug (its
+bounding box matched every other card exactly). Zero new console
+errors (the only console entries are the pre-existing, unrelated
+broken `example.com` sample-image URLs seen since Phase 1).
+
+Commit:
+
+```text
+feat(ui): build professional customer pages
+```
+
+---
+
 # RESPONSE/COMMIT PROTOCOL
 
 Every Claude response must use:
@@ -729,40 +800,6 @@ Commit automatically at the end of a successful phase (per the developer's instr
 ---
 
 # PRE-AWS DEVELOPMENT ROADMAP
-
----
-
-## Response #14 — Phase 12: Professional Customer Pages
-
-Build real:
-
-- Home
-- About
-- Contact
-
-Home can include:
-
-- hero
-- featured products
-- categories
-- promotions
-- value proposition
-- AI Concierge CTA
-
-Contact can include a proper form and only real/approved business contact information.
-
-Learn:
-
-- responsive UI
-- accessibility
-- semantic HTML
-- component composition
-
-Commit:
-
-```text
-feat(ui): build professional customer pages
-```
 
 ---
 
@@ -1239,13 +1276,14 @@ Completed:
 #11 PASS
 #12 PASS
 #13 PASS
+#14 PASS
 ```
 
 Next:
 
 ```text
-Response #14
-Phase 12 — Professional Customer Pages
+Response #15
+Phase 13 — Customer Profile
 ```
 
 ---
