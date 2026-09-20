@@ -1084,6 +1084,198 @@ chore(cleanup): remove dead code and development artifacts
 
 ---
 
+## Response #19 — Phase 17: UI/Design Overhaul
+
+Status: PASS
+
+Inserted ahead of the original Phase 17 (Deploy) and everything after
+it (all renumbered below by +1) at the developer's request: the
+storefront worked but looked visually plain (inconsistent ad-hoc
+Tailwind colors, no shared component system, a couple of genuinely
+broken/ugly screens), and the developer wanted it to look
+attractive/professional before the first public release rather than
+shipping the plain styling and revisiting it later. Developer supplied
+a comparison table of component/UI libraries (shadcn/ui, Aceternity
+UI, Magic UI, 21st.dev, daisyUI, HeroUI, Mantine, Tremor) and asked
+which to use.
+
+Decision (frontend was already Tailwind CSS v4, no existing component
+library):
+
+- **shadcn/ui** — adopted as the core component system (buttons,
+  inputs, labels, cards, badges, select, textarea, avatar, dropdown
+  menu, sheet, skeleton). Copy-in Radix + Tailwind components, not a
+  runtime dependency, so it composes with the existing hand-written
+  Tailwind instead of fighting it.
+- **Magic UI** — adopted selectively (`AnimatedGradientText`) for the
+  homepage hero, since it's also Tailwind-native and free.
+- Not adopted: Aceternity UI (overlaps with Magic UI, heavier/paid
+  tiers), 21st.dev (unmoderated community source), daisyUI/HeroUI/
+  Mantine (each imposes its own component class system or theming
+  layer that would conflict with shadcn/ui + Tailwind), Tremor (built
+  for analytics dashboards; no admin analytics page exists to justify
+  it).
+- Brand theme: switched shadcn's default black/white "neutral" palette
+  to a pink/rose theme (`--primary: #db2777` light / `#f472b6` dark)
+  matching the storefront's existing "Skincare & Beauty" positioning
+  and the pink/purple gradient already used on the old landing hero.
+
+FILES CREATED: `components.json`, `jsconfig.json` (adds the `@/*` →
+`src/*` path alias shadcn's CLI expects), `src/lib/utils.js` (shadcn's
+`cn()` helper), `src/components/ui/*` (button, card, input, label,
+badge, avatar, dropdown-menu, select, textarea, skeleton, sheet,
+animated-gradient-text — dialog/separator/shimmer-button were
+generated but never used by any page, so they were deleted again
+rather than left as dead code), `public/logo-icon.png` (see BUGS
+FIXED).
+
+FILES MODIFIED: `vite.config.js` (path alias), `src/index.css` (theme
+tokens + Magic UI keyframes), `index.html` (real page title, favicon
+now points at the new cropped icon), `src/pages/home.jsx` (header
+height plumbing — see BUGS FOUND), `src/components/header.jsx`
+(rebuilt), `src/components/productCard.jsx` (rebuilt),
+`src/components/productReviews.jsx` (button color only),
+`src/pages/login.jsx` and `register.jsx` (rebuilt),
+`src/pages/client/landingPage.jsx` (rebuilt),
+`src/pages/client/productPage.jsx` (filters/pagination restyled),
+`src/pages/client/cartPage.jsx` and `checkoutPage.jsx` (restyled),
+`src/pages/client/productDetailPage.jsx`, `wishlistPage.jsx`,
+`payPage.jsx`, `contactPage.jsx`, `profilePage.jsx`,
+`orderDetailPage.jsx`, `myOrdersPage.jsx`, `conciergePage.jsx` (accent
+color swept from blue to the new primary token for consistency).
+
+FILES NOT MODIFIED: the entire `src/pages/admin/**` tree and
+`adminPage.jsx` — deliberately out of scope (back-office, not
+customer-facing; matches how earlier phases have scoped "the app"
+elsewhere in this roadmap).
+
+WHAT WAS IMPLEMENTED: a shadcn/ui + Magic UI design pass across every
+customer-facing surface — global header/nav (including a real mobile
+hamburger menu via shadcn's `Sheet`, replacing a nonexistent one),
+landing page hero/featured/on-sale/value-prop/concierge-teaser
+sections, the product card used everywhere (home, listing, wishlist,
+concierge), the product listing's search/price/sort controls, login
+and register, cart, and checkout. Pure visual/component-layer change —
+no new routes, no backend changes, no change to existing data flow or
+business logic.
+
+TESTS PERFORMED:
+1. `npm run build` (production build) after every batch of changes —
+   stayed green throughout, final build 2178 modules, zero errors.
+2. `npm run lint` — zero new errors (the 2 introduced along the way,
+   `no-undef` on `__dirname` in `vite.config.js` and an eslint
+   destructuring/JSX quirk in `landingPage.jsx`, were both found and
+   fixed; the 7 remaining lint errors are pre-existing, untouched
+   files: `react-refresh/only-export-components` on the 3 Contexts +
+   `orderPage.jsx` + shadcn's own `button.jsx`/`badge.jsx`, and one
+   pre-existing unused var in `addProductPage.jsx`).
+3. Real browser verification with Playwright (not mocked) across
+   desktop (1440px) and mobile (390px) viewports, covering every
+   customer route (`/`, `/product`, `/login`, `/register`, `/cart`,
+   `/checkout`, `/about`, `/contact`, `/concierge`, `/wishlist`,
+   `/my-orders`, `/profile`) plus a 404 product page: zero JS
+   `pageerror` events, zero new console/network errors beyond the
+   pre-existing dead seed-data image URLs (see BUGS FOUND).
+
+TEST RESULTS: all customer routes render correctly with no layout
+overlap, no unstyled/raw elements, and consistent brand color; mobile
+hamburger menu opens/closes/navigates correctly; broken product images
+now degrade gracefully.
+
+BUGS FOUND (pre-existing, unrelated to this phase's own changes):
+- `header.jsx` had `font-boold` instead of `font-bold` — an invalid
+  Tailwind class name that silently did nothing, so every nav link had
+  been rendering un-bold this whole time.
+- `src/components/productCard.css` — a dead stylesheet, not imported
+  anywhere (superseded long ago), still sitting in the repo.
+- Two seeded products' image URLs point at an unreachable Supabase
+  project and one at `example.com` (already flagged as a known,
+  out-of-scope live-database issue back in Phase 16) — rendered as the
+  browser's broken-image icon.
+- Login/register/header all displayed `/public/logo.png` (a generic
+  stock "Costume Logo" placeholder, icon + wordmark stacked in one
+  335×221 image) cropped into a small circle — `object-cover` on a
+  landscape source scaled to fit a square box has zero vertical
+  overflow to crop, so the wordmark text always rendered too,
+  producing an illegible "...STUME LO" fragment regardless of
+  `object-position`.
+
+BUGS FIXED:
+- `font-boold` → `font-bold` (folded into the header rebuild).
+- Deleted the dead `productCard.css`.
+- `ProductCard`'s `<img>` now has an `onError` handler that swaps to a
+  clean "No Image" placeholder (icon + label) instead of showing the
+  browser's broken-image glyph — the underlying seed-data URLs
+  themselves were left alone (live DB records, same call as Phase 16).
+- Cropped the icon out of `logo.png` (using `sharp`, ad hoc, not added
+  as a project dependency) into a new square `public/logo-icon.png`
+  containing just the crown/face glyph with no text, and pointed the
+  header, login, register, and favicon at it instead.
+- Self-introduced regression, caught before shipping: refactoring
+  `home.jsx`'s route-outlet wrapper from a fixed `h-[calc(100vh-80px)]`
+  to a `flex-1` (to make the newly-`sticky` header work with normal
+  document scrolling) broke every page that relied on `h-full` to
+  center empty/loading/error states (cart-empty, checkout-empty,
+  product-not-found, and every client-page loading spinner) — a
+  flex item's percentage `height` doesn't resolve against a parent
+  whose own size comes from `flex-grow` (confirmed empirically:
+  swapping the child to `flex: 1` fixed it instantly, `height: 100%`
+  did not, even with an explicit `min-height` on the parent). Fixed by
+  giving the wrapper an explicit `h-[calc(100vh-4rem)]` (4rem matching
+  the header's new `h-16`) instead of `flex-1` — restores `h-full`
+  resolution for short pages while a Playwright scroll test confirmed
+  tall pages (landing, 2259px content) still scroll past it normally
+  with no clipping, since the wrapper has no background/border to
+  visually reveal the mismatch.
+
+DEFERRED (flagged, not actioned — out of scope for a visual/component
+phase):
+- The admin panel (`src/pages/admin/**`) — intentionally left on its
+  original plain-Tailwind styling; back-office tooling, not part of
+  "make the storefront attractive."
+- `public/logo.png` itself is a generic stock placeholder ("Costume
+  Logo") and `public/loginpage.jpg` (the login/register background) is
+  an unrelated stock beach/seashell photo — neither matches the
+  skincare/beauty brand. Real brand assets are a business decision, not
+  a code change; noted for whenever real logo/photography exists.
+- Chunk-size build warning (`index-*.js` at 644 KB) — pre-existing,
+  slightly larger now from the added UI/animation libraries; code-
+  splitting is a Phase 18 (Production Hardening) concern, not this
+  phase's.
+
+WHAT I LEARNED:
+- shadcn/ui's newer CLI (v4, "Nova" preset) is copy-in, not an npm
+  component library — it vendors Radix-based source files straight
+  into `src/components/ui`, wires Tailwind v4 theme tokens as CSS
+  variables, and even vendors its own `cn()` re-export from an npm
+  package called `cn` rather than always writing to `src/lib/utils`.
+- percentage heights on a flex item do not reliably resolve when the
+  parent's own height comes from flex distribution (`flex-grow`) —
+  the well-known "give the parent an explicit height, not just
+  min-height, or give the child `flex: 1` instead of `height: 100%`"
+  gotcha, confirmed empirically here rather than assumed.
+- `object-position` only has room to do anything when the image
+  actually overflows the box on that axis; cropping a specific glyph
+  out of a multi-element source image (icon + wordmark) requires
+  actually cropping the source asset, not repositioning it in CSS.
+
+INTERVIEW QUESTIONS:
+1. Why does `height: 100%` on a flex item sometimes fail even when the
+   parent visibly has a definite pixel height on screen?
+2. What's the practical difference between a "copy-in" component
+   library (shadcn/ui) and an npm-dependency one (e.g. Mantine), and
+   what tradeoff does each make?
+3. Why is it safe to fall back an image's `onError` handler to a
+   placeholder instead of trying to fix the broken URL itself here?
+
+NEXT PHASE:
+Response #20 — Phase 18: Deploy to Vercel + Render (First Release)
+
+GIT COMMIT:
+feat(ui): adopt shadcn/ui and Magic UI for a design overhaul
+
+---
+
 # RESPONSE/COMMIT PROTOCOL
 
 Every Claude response must use:
@@ -1161,13 +1353,15 @@ Commit automatically at the end of a successful phase (per the developer's instr
 
 ---
 
-## Response #19 — Phase 17: Deploy to Vercel + Render (First Release)
+---
+
+## Response #20 — Phase 18: Deploy to Vercel + Render (First Release)
 
 Inserted ahead of the original Phase 17 (renumbered below) at the
 developer's request: get a real, live first release out on Vercel
 (frontend) + Render (backend) now, then do hardening/testing/docs
 against the deployed app rather than before it. The AWS stage
-(#22–#35 below) stays in the roadmap as a later, separate migration —
+(#23–#36 below) stays in the roadmap as a later, separate migration —
 nothing about it changes because of this phase.
 
 Frontend → Vercel (static Vite build), Backend → Render (Node/Express
@@ -1206,7 +1400,7 @@ chore(deploy): configure app for Vercel and Render deployment
 
 ---
 
-## Response #20 — Phase 18: Production Hardening
+## Response #21 — Phase 19: Production Hardening
 
 Backend review:
 
@@ -1252,7 +1446,7 @@ chore(prod): harden application for deployment
 
 ---
 
-## Response #21 — Phase 19: Automated Testing
+## Response #22 — Phase 20: Automated Testing
 
 Create a reliable test suite.
 
@@ -1300,7 +1494,7 @@ test: add application test suite
 
 ---
 
-## Response #22 — Phase 20: Documentation & Final Pre-AWS Audit
+## Response #23 — Phase 21: Documentation & Final Pre-AWS Audit
 
 Document:
 
@@ -1492,10 +1686,11 @@ If unrelated changes appear, stop and decide whether to revert, defer, or explic
 | #16      | Wishlist                  | `feat(shop): add wishlist and shopping enhancements`            |
 | #17      | AI Concierge              | `feat(ai): add beauty and style shopping concierge`             |
 | #18      | Cleanup                   | `chore(cleanup): remove dead code and development artifacts`    |
-| #19      | Deploy (Vercel + Render)  | `chore(deploy): configure app for Vercel and Render deployment` |
-| #20      | Production hardening      | `chore(prod): harden application for deployment`                |
-| #21      | Testing                   | `test: add application test suite`                              |
-| #22      | Documentation/final audit | `docs: document application and deployment prerequisites`       |
+| #19      | UI/Design overhaul        | `feat(ui): adopt shadcn/ui and Magic UI for a design overhaul`  |
+| #20      | Deploy (Vercel + Render)  | `chore(deploy): configure app for Vercel and Render deployment` |
+| #21      | Production hardening      | `chore(prod): harden application for deployment`                |
+| #22      | Testing                   | `test: add application test suite`                              |
+| #23      | Documentation/final audit | `docs: document application and deployment prerequisites`       |
 
 ---
 
@@ -1553,13 +1748,14 @@ Completed:
 #16 PASS
 #17 PASS
 #18 PASS
+#19 PASS
 ```
 
 Next:
 
 ```text
-Response #19
-Phase 17 — Deploy to Vercel + Render (First Release)
+Response #20
+Phase 18 — Deploy to Vercel + Render (First Release)
 ```
 
 ---
@@ -1569,8 +1765,8 @@ Phase 17 — Deploy to Vercel + Render (First Release)
 AWS must remain separate from application completion.
 
 Note: this stage is a later, separate migration — the first real
-release runs on Vercel + Render (Response #19). The response numbers
-below (#22–#35) predate that insertion and are already described as
+release runs on Vercel + Render (Response #20). The response numbers
+below (#23–#36) predate that insertion and are already described as
 provisional ("finalized after the pre-AWS exit audit"); treat them as
 placeholders to renumber sequentially whenever this stage actually
 starts, not as fixed response numbers.
@@ -1626,20 +1822,20 @@ When AWS starts, continue the same response/commit system.
 Possible AWS responses:
 
 ```text
-#22 AWS architecture
-#23 Docker backend
-#24 Frontend production build/container strategy
-#25 ECR
-#26 ECS/Fargate
-#27 ALB
-#28 Route 53
-#29 CloudFront/S3
-#30 Secrets Manager/IAM
-#31 CloudWatch
-#32 Terraform
-#33 GitHub Actions CI/CD
-#34 Production deployment
-#35 Final production verification
+#23 AWS architecture
+#24 Docker backend
+#25 Frontend production build/container strategy
+#26 ECR
+#27 ECS/Fargate
+#28 ALB
+#29 Route 53
+#30 CloudFront/S3
+#31 Secrets Manager/IAM
+#32 CloudWatch
+#33 Terraform
+#34 GitHub Actions CI/CD
+#35 Production deployment
+#36 Final production verification
 ```
 
 The exact AWS plan should be finalized after the pre-AWS exit audit.
