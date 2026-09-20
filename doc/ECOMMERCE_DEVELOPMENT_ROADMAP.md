@@ -1161,7 +1161,52 @@ Commit automatically at the end of a successful phase (per the developer's instr
 
 ---
 
-## Response #19 — Phase 17: Production Hardening
+## Response #19 — Phase 17: Deploy to Vercel + Render (First Release)
+
+Inserted ahead of the original Phase 17 (renumbered below) at the
+developer's request: get a real, live first release out on Vercel
+(frontend) + Render (backend) now, then do hardening/testing/docs
+against the deployed app rather than before it. The AWS stage
+(#22–#35 below) stays in the roadmap as a later, separate migration —
+nothing about it changes because of this phase.
+
+Frontend → Vercel (static Vite build), Backend → Render (Node/Express
+web service), MongoDB stays Atlas (already cloud-hosted, no change).
+
+Split of work:
+
+- Claude prepares every code/config change the deployment needs
+  (SPA rewrite config for Vercel, a real production start script for
+  Render instead of nodemon, confirming CORS/PORT/env-var handling
+  already supports this), and documents the exact env vars each
+  platform's dashboard needs.
+- The developer performs the account-level steps only they can do in
+  this sandboxed environment (Vercel/Render require an interactive
+  browser login neither CLI can complete here): creating/logging into
+  both accounts, connecting each platform to the right GitHub repo,
+  and clicking deploy.
+- Once both are live, Claude wires up the final cross-references
+  (Render's `FRONTEND_URL` → the real Vercel URL, Vercel's
+  `VITE_BACKEND_URL` → the real Render URL) and verifies the live
+  deployment end-to-end (real curl/browser checks against the
+  production URLs, not just localhost).
+
+Learn:
+
+- static frontend hosting vs a long-running backend process
+- environment-specific configuration (dev vs production origins)
+- SPA client-side routing needing a host-level rewrite rule
+- why `nodemon` belongs in dev only, never as a production start command
+
+Commit:
+
+```text
+chore(deploy): configure app for Vercel and Render deployment
+```
+
+---
+
+## Response #20 — Phase 18: Production Hardening
 
 Backend review:
 
@@ -1207,7 +1252,7 @@ chore(prod): harden application for deployment
 
 ---
 
-## Response #20 — Phase 18: Automated Testing
+## Response #21 — Phase 19: Automated Testing
 
 Create a reliable test suite.
 
@@ -1255,7 +1300,7 @@ test: add application test suite
 
 ---
 
-## Response #21 — Phase 19: Documentation & Final Pre-AWS Audit
+## Response #22 — Phase 20: Documentation & Final Pre-AWS Audit
 
 Document:
 
@@ -1447,9 +1492,10 @@ If unrelated changes appear, stop and decide whether to revert, defer, or explic
 | #16      | Wishlist                  | `feat(shop): add wishlist and shopping enhancements`            |
 | #17      | AI Concierge              | `feat(ai): add beauty and style shopping concierge`             |
 | #18      | Cleanup                   | `chore(cleanup): remove dead code and development artifacts`    |
-| #19      | Production hardening      | `chore(prod): harden application for deployment`                |
-| #20      | Testing                   | `test: add application test suite`                              |
-| #21      | Documentation/final audit | `docs: document application and deployment prerequisites`       |
+| #19      | Deploy (Vercel + Render)  | `chore(deploy): configure app for Vercel and Render deployment` |
+| #20      | Production hardening      | `chore(prod): harden application for deployment`                |
+| #21      | Testing                   | `test: add application test suite`                              |
+| #22      | Documentation/final audit | `docs: document application and deployment prerequisites`       |
 
 ---
 
@@ -1513,7 +1559,7 @@ Next:
 
 ```text
 Response #19
-Phase 17 — Production Hardening
+Phase 17 — Deploy to Vercel + Render (First Release)
 ```
 
 ---
@@ -1521,6 +1567,13 @@ Phase 17 — Production Hardening
 # AWS STAGE — AFTER ALL PRE-AWS PHASES
 
 AWS must remain separate from application completion.
+
+Note: this stage is a later, separate migration — the first real
+release runs on Vercel + Render (Response #19). The response numbers
+below (#22–#35) predate that insertion and are already described as
+provisional ("finalized after the pre-AWS exit audit"); treat them as
+placeholders to renumber sequentially whenever this stage actually
+starts, not as fixed response numbers.
 
 Expected high-level target:
 

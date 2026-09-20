@@ -31,6 +31,13 @@ app.use(express.json({ verify: (req, _res, buf) => { req.rawBody = buf; } }));
 // attaches req.user, but never blocks an anonymous request by itself.
 app.use(authenticateUser);
 
+// A live deployment's bare root URL has nothing else to show — this gives
+// Render's platform (and anyone sanity-checking the deployed URL directly)
+// a clean 200 instead of falling through to the JSON 404 handler below.
+app.get("/", (req, res) => {
+  res.json({ status: "ok", service: "e-commerce-api" });
+});
+
 app.use("/api/user", userRouter);
 app.use("/api/product", productRouter);
 app.use("/api/order", orderRouter);
