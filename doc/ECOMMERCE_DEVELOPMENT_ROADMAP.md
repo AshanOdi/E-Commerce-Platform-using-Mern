@@ -992,6 +992,98 @@ feat(ai): add beauty and style shopping concierge
 
 ---
 
+## Response #18 — Phase 16: Cleanup
+
+Status: PASS
+
+Verified every item against actual references before touching
+anything — nothing was deleted "because it looked unused."
+
+Removed (confirmed dead via grep across BOTH repos, not assumption):
+
+- Backend: `models/student.js`, `controller/studentController.js`,
+  `routers/studentRouter.js`, and the `/api/student` mount in
+  `index.js`. Notably `studentController.js` wasn't even imported by
+  its own router — `studentRouter.js` had its own inline duplicate
+  handlers — so it was dead on arrival, not just unused later.
+- Backend: the `body` and `parser` npm packages — grepped for any
+  `require`/`import` of either across the whole repo, zero hits.
+  Removed via `npm uninstall` (updates `package-lock.json` too).
+- Frontend: `src/pages/testPage.jsx` (a Supabase upload scratch page
+  superseded by the real `src/utils/mediaUpload.jsx`, including a
+  hardcoded, already-commented-out Supabase key in its source — noted
+  below) and its `/testing/*` route + import in `App.jsx`.
+- Frontend: `src/pages/admin/newPAge.jsx` — unreferenced anywhere,
+  and would have thrown at runtime if it ever had been (uses
+  `useState` without importing it).
+- Frontend: `src/assets/sampleData.js` — its only use was
+  `AdminProductPage`'s initial `useState`, which is always overwritten
+  by the real `/api/product` fetch before the table's `isLoading`
+  flag ever lets it render — provably inert, not merely "probably
+  unused."
+- Frontend: the `dotenv` npm package — grepped for any import, zero
+  hits; Vite uses `import.meta.env`, this was never wired to anything.
+- Leftover debug `console.log` calls in `mediaUpload.jsx`,
+  `addProductPage.jsx`, `editProductPage.jsx`, and `register.jsx` —
+  all already had proper toast-based user feedback, the logs were
+  pure development cruft.
+
+Also fixed, found during verification (falls under "other verified
+development-only artifacts"): the live `/admin` root route
+(`adminPage.jsx`) rendered literally `<h1>FUCK YOU</h1>` — real
+placeholder profanity, reachable by any admin navigating to the bare
+`/admin` URL. Replaced with `<Navigate to="/admin/products" replace />`,
+landing on the sensible default tab instead. Also removed a chunk of
+commented-out scratch JSX (an unused colored-boxes demo block) and a
+stray leftover Supabase-URL comment from the bottom of `App.jsx`.
+
+Verified but deliberately left alone (not dead code, just
+out-of-scope for a cleanup phase):
+
+- `/admin/reviews` — a harmless `<h1>REVIEW PAGE</h1>` stub for an
+  admin review-moderation UI that was never built. This is a missing
+  feature, not a development artifact to delete; building the real
+  page is a feature addition beyond this phase's scope.
+- The "profanity placeholder" roadmap bullet otherwise didn't apply —
+  grepped for any profanity-filter/placeholder logic in either repo,
+  none exists, so there was nothing else to remove under that item
+  besides the `/admin` root fix above.
+- The Supabase anon key hardcoded in `mediaUpload.jsx` — Supabase
+  anon keys are designed to be public/client-exposed (protected by
+  Row Level Security policies, not secrecy), so this isn't a
+  dead-code deletion case. Moving it into a `VITE_` env var is a
+  config-hygiene improvement that belongs to Phase 17 (Production
+  Hardening), not this cleanup phase — noted for that phase instead
+  of actioned here.
+- Real junk product documents already sitting in the live MongoDB
+  Atlas catalog (e.g. `adasd`, `adsaddasdad`) and the Phase-1-era
+  broken `example.com` sample image URLs on seeded products — these
+  are live database records, not code in this repo, and out of scope
+  for a code-cleanup phase to silently edit.
+- `npm audit`-reported vulnerabilities (pre-existing, both repos) —
+  dependency version hardening is a Phase 17 concern, not cleanup.
+
+Verified via a production build (`npm run build` — 197 modules
+transformed, zero errors) and real browser testing (Playwright): the
+old `/testing` route now correctly falls through to the app's own
+404 page; logging in as the real admin account and landing on
+`/admin` now redirects straight to `/admin/products` with the
+product table rendering normally, no trace of the old placeholder
+text anywhere in the DOM. Backend restarted clean with the student
+router fully removed (`GET /api/student` now correctly 404s) and
+`GET /api/product` still 200 with the trimmed dependency list. Zero
+new console errors (only the same pre-existing, unrelated broken
+`example.com` sample-image URLs already flagged as a known issue in
+earlier phases).
+
+Commit:
+
+```text
+chore(cleanup): remove dead code and development artifacts
+```
+
+---
+
 # RESPONSE/COMMIT PROTOCOL
 
 Every Claude response must use:
@@ -1066,29 +1158,6 @@ Commit automatically at the end of a successful phase (per the developer's instr
 ---
 
 # PRE-AWS DEVELOPMENT ROADMAP
-
----
-
-## Response #18 — Phase 16: Cleanup
-
-Remove after verifying references:
-
-- student model/controller/router
-- `/api/student`
-- Supabase testing page/route
-- profanity placeholder
-- dead dependencies
-- debug logs
-- obsolete sample data
-- other verified development-only artifacts
-
-Do not delete code merely because it looks unused; verify first.
-
-Commit:
-
-```text
-chore(cleanup): remove dead code and development artifacts
-```
 
 ---
 
@@ -1437,13 +1506,14 @@ Completed:
 #15 PASS
 #16 PASS
 #17 PASS
+#18 PASS
 ```
 
 Next:
 
 ```text
-Response #18
-Phase 16 — Cleanup
+Response #19
+Phase 17 — Production Hardening
 ```
 
 ---

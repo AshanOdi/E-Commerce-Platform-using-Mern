@@ -2,7 +2,6 @@ import express from "express";
 import mongoose from "mongoose";
 import cors from "cors";
 import dotenv from "dotenv";
-import studentRouter from "./routers/studentRouter.js";
 import userRouter from "./routers/userRoute.js";
 import productRouter from "./routers/productRoutes.js";
 import orderRouter from "./routers/orderRouter.js";
@@ -32,7 +31,6 @@ app.use(express.json({ verify: (req, _res, buf) => { req.rawBody = buf; } }));
 // attaches req.user, but never blocks an anonymous request by itself.
 app.use(authenticateUser);
 
-app.use("/api/student", studentRouter);
 app.use("/api/user", userRouter);
 app.use("/api/product", productRouter);
 app.use("/api/order", orderRouter);
