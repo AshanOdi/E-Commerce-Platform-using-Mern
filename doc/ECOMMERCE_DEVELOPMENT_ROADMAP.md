@@ -1230,9 +1230,26 @@ BUGS FIXED:
 
 DEFERRED (flagged, not actioned — out of scope for a visual/component
 phase):
-- The admin panel (`src/pages/admin/**`) — intentionally left on its
+- ~~The admin panel (`src/pages/admin/**`) — intentionally left on its
   original plain-Tailwind styling; back-office tooling, not part of
-  "make the storefront attractive."
+  "make the storefront attractive."~~ Addendum, same day: the developer
+  asked for the admin panel too after seeing it (a blue/yellow/salmon
+  `bg-blue-300`/`bg-yellow-600`/`bg-red-400` combination with an
+  unstyled raw `<table>`). Restyled `adminPage.jsx` (sidebar nav with
+  active-state highlighting, icons, a "Back to store" link),
+  `admin/productPage.jsx` (added shadcn's `Table` component, a
+  `ProductThumb` helper with the same broken-image fallback as the
+  storefront's `ProductCard`, badges for stock), `admin/addProductPage.jsx`
+  and `editProductPage.jsx` (Card/Label/Input/Textarea forms, replacing
+  bare unlabeled inputs), and a light color-token sweep (blue→primary,
+  spinners) on `admin/orderPage.jsx`, `orderDetailPage.jsx`, and
+  `userPage.jsx`, which were already reasonably structured. The
+  `/admin/reviews` stub's literal `<h1>REVIEW PAGE</h1>` was replaced
+  with a styled explanation that moderation UI was never built (still
+  no moderation feature — a copy/style change only). Verified the same
+  way as the rest of this phase: build, lint, and a real Playwright
+  pass logged in as the actual admin account across every admin route,
+  zero JS errors.
 - `public/logo.png` itself is a generic stock placeholder ("Costume
   Logo") and `public/loginpage.jpg` (the login/register background) is
   an unrelated stock beach/seashell photo — neither matches the
