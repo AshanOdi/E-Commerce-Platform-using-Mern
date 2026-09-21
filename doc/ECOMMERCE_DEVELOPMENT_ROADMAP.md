@@ -1250,11 +1250,26 @@ phase):
   way as the rest of this phase: build, lint, and a real Playwright
   pass logged in as the actual admin account across every admin route,
   zero JS errors.
-- `public/logo.png` itself is a generic stock placeholder ("Costume
+- ~~`public/logo.png` itself is a generic stock placeholder ("Costume
   Logo") and `public/loginpage.jpg` (the login/register background) is
   an unrelated stock beach/seashell photo — neither matches the
   skincare/beauty brand. Real brand assets are a business decision, not
-  a code change; noted for whenever real logo/photography exists.
+  a code change; noted for whenever real logo/photography exists.~~
+  Addendum, same day: developer called login/register "trash, not
+  matching with site theme" and separately reported losing all
+  navigation on those two pages (browser back was the only way out).
+  The nav-loss bug was structural, not cosmetic: `App.jsx` rendered
+  `/login`/`/register` as top-level routes, siblings of `<HomePage/>`
+  rather than children of it, and `<Header/>` only ever rendered
+  inside `HomePage`. Moved both routes into `home.jsx`'s own
+  `<Routes>` so they inherit the header (and its mobile menu, cart/
+  wishlist icons, auth-aware nav) like every other page automatically.
+  For the mismatched theme, replaced the stock beach-photo background
+  with the same pink/rose/purple gradient already used on the landing
+  hero — on-brand, no new asset needed — and deleted the now-
+  unreferenced `public/loginpage.jpg`. `public/logo.png`'s "Costume
+  Logo" placeholder remains a real business decision (a brand asset,
+  not a styling one) and is still deferred.
 - Chunk-size build warning (`index-*.js` at 644 KB) — pre-existing,
   slightly larger now from the added UI/animation libraries; code-
   splitting is a Phase 18 (Production Hardening) concern, not this
