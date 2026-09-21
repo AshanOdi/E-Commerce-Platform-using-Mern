@@ -1275,6 +1275,38 @@ phase):
   splitting is a Phase 18 (Production Hardening) concern, not this
   phase's.
 
+Addendum, same day: developer asked "can we implement dark mode".
+The shadcn theme tokens already had a full `.dark` color set defined
+in `index.css` from the original overhaul (unused until now) — most of
+the work was (1) a toggle (new `src/context/ThemeContext.jsx`,
+persisted to `localStorage`, a synchronous inline bootstrap script in
+`index.html` to avoid a flash of the wrong theme, sun/moon buttons in
+both the storefront header and the admin sidebar since they're
+separate layouts) and (2) sweeping every remaining page's raw
+`text-gray-*`/`bg-white`/`border-gray-*` classes to the semantic
+tokens those `.dark` values actually control — a page still hardcoded
+to a raw gray doesn't get darker just because `.dark` is on `<html>`.
+Colored status pills (order status, verified-purchase, paid/blocked)
+needed real `dark:bg-{color}-500/15 dark:text-{color}-400` variants
+since there's no semantic success/warning token in this theme. Caught
+a real bug along the way: several hand-styled buttons paired a literal
+`text-white` with `bg-primary` — invisible in light mode (both are
+~white there) but broken in dark mode, where `--primary` becomes light
+pink and `--primary-foreground` a dark maroon for contrast, so white
+text on light pink was barely readable; fixed by using
+`text-primary-foreground` on the `bg-primary` branch of each button
+specifically, not blindly everywhere `text-white` appeared. Also fixed
+a small pre-existing gap noticed while touching `productDetailPage.jsx`
+for this pass: its gallery images had no broken-image fallback unlike
+`ProductCard` and the admin product table, so the same dead seed-data
+image URLs showed the browser's broken-image icon there — added the
+same fallback pattern. Verified with build, lint, and a real Playwright
+pass in both themes (landing, product listing, login, register,
+contact, admin products/orders/reviews, a product detail page's review
+form), confirmed the theme persists across a full reload, and reran
+the full route regression (customer + logged-in + admin routes) in
+light mode — zero JS errors.
+
 WHAT I LEARNED:
 - shadcn/ui's newer CLI (v4, "Nova" preset) is copy-in, not an npm
   component library — it vendors Radix-based source files straight
