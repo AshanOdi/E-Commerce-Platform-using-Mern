@@ -1,4 +1,4 @@
-# Skincare & Beauty Shop — Backend
+# POP Cosmetics — Backend
 
 Express + MongoDB API for a full-featured MERN e-commerce platform: catalog, cart/checkout, orders with atomic inventory control, reviews, a mock payment gateway, wishlists, an AI shopping concierge (Google Gemini), and full admin management.
 
